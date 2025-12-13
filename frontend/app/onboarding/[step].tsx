@@ -1,291 +1,436 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   TouchableOpacity,
-  Platform,
-  KeyboardAvoidingView,
   ScrollView,
+  Dimensions,
+  Animated,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useLocalSearchParams, router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useStore } from '../../src/store/useStore';
-import { createOnboardingProfile } from '../../src/services/api';
-import { COLORS, SPACING, FONTS, BORDER_RADIUS } from '../../src/constants/theme';
+import { createOnboardingProfile, createUser, linkOnboardingToUser } from '../../src/services/api';
+import { initializeNotifications } from '../../src/services/notifications';
+import { COLORS, SPACING, FONTS, BORDER_RADIUS, COACH_STYLES } from '../../src/constants/theme';
 
-const ONBOARDING_QUESTIONS = [
+const { width } = Dimensions.get('window');
+
+// ==================== QUESTION DEFINITIONS ====================
+
+interface Option {
+  id: string;
+  label: string;
+  icon?: string;
+}
+
+interface Question {
+  id: string;
+  title: string;
+  subtitle: string;
+  type: 'single' | 'multi';
+  options: Option[];
+  fieldName: string;
+}
+
+const QUESTIONS: Question[] = [
   {
-    id: 'primary_change_domain',
-    question: 'What do you want to change right now?',
+    id: '1',
+    title: 'What do you want to change right now?',
     subtitle: 'Which area of your life do you most want to improve?',
+    type: 'single',
     options: [
-      { value: 'sleep_energy', label: 'Sleep & Energy', icon: 'moon-outline' },
-      { value: 'focus_productivity', label: 'Focus & Productivity', icon: 'flash-outline' },
-      { value: 'health_fitness', label: 'Health & Fitness', icon: 'fitness-outline' },
-      { value: 'spiritual_mental', label: 'Spiritual / Mental Well-being', icon: 'leaf-outline' },
-      { value: 'discipline', label: 'Discipline & Consistency', icon: 'timer-outline' },
-      { value: 'relationships', label: 'Relationships / Personal Conduct', icon: 'people-outline' },
-      { value: 'specific', label: 'Something Specific', icon: 'create-outline' },
+      { id: 'sleep_energy', label: 'Sleep & energy', icon: 'moon-outline' },
+      { id: 'focus_productivity', label: 'Focus & productivity', icon: 'flash-outline' },
+      { id: 'health_fitness', label: 'Health & fitness', icon: 'fitness-outline' },
+      { id: 'spiritual_mental', label: 'Spiritual / mental well-being', icon: 'leaf-outline' },
+      { id: 'discipline', label: 'Discipline & consistency', icon: 'timer-outline' },
+      { id: 'relationships', label: 'Relationships / personal conduct', icon: 'people-outline' },
+      { id: 'specific', label: 'Something specific', icon: 'sparkles-outline' },
     ],
+    fieldName: 'primary_change_domain',
   },
   {
-    id: 'failure_patterns',
-    question: 'When do you usually fail with habits?',
-    subtitle: 'Select all that apply - this helps predict your challenge points',
-    multiSelect: true,
+    id: '2',
+    title: 'When do you usually fail with habits?',
+    subtitle: 'When do you most often break habits you try to build?',
+    type: 'multi',
     options: [
-      { value: 'mornings', label: 'Mornings', icon: 'sunny-outline' },
-      { value: 'evenings', label: 'Evenings', icon: 'moon-outline' },
-      { value: 'weekends', label: 'Weekends', icon: 'calendar-outline' },
-      { value: 'stressful_days', label: 'Stressful Days', icon: 'thunderstorm-outline' },
-      { value: 'miss_one_day', label: 'When I Miss One Day', icon: 'close-circle-outline' },
-      { value: 'no_clear_reason', label: 'I Usually Quit Without a Clear Reason', icon: 'help-circle-outline' },
+      { id: 'mornings', label: 'Mornings', icon: 'sunny-outline' },
+      { id: 'evenings', label: 'Evenings', icon: 'moon-outline' },
+      { id: 'weekends', label: 'Weekends', icon: 'calendar-outline' },
+      { id: 'stressful_days', label: 'Stressful days', icon: 'alert-circle-outline' },
+      { id: 'miss_one_day', label: 'When I miss one day', icon: 'close-circle-outline' },
+      { id: 'quit_no_reason', label: 'I usually quit without a clear reason', icon: 'help-circle-outline' },
     ],
+    fieldName: 'failure_patterns',
   },
   {
-    id: 'baseline_consistency_level',
-    question: 'How consistent are you right now?',
+    id: '3',
+    title: 'How consistent are you right now?',
     subtitle: 'Over the last 30 days, how consistent have you been with routines?',
+    type: 'single',
     options: [
-      { value: 'very_inconsistent', label: 'Very Inconsistent', icon: 'trending-down-outline' },
-      { value: 'somewhat_inconsistent', label: 'Somewhat Inconsistent', icon: 'remove-outline' },
-      { value: 'mostly_consistent', label: 'Mostly Consistent', icon: 'trending-up-outline' },
-      { value: 'extremely_consistent', label: 'Extremely Consistent', icon: 'checkmark-done-outline' },
+      { id: 'very_inconsistent', label: 'Very inconsistent', icon: 'close-outline' },
+      { id: 'somewhat_inconsistent', label: 'Somewhat inconsistent', icon: 'remove-outline' },
+      { id: 'mostly_consistent', label: 'Mostly consistent', icon: 'add-outline' },
+      { id: 'extremely_consistent', label: 'Extremely consistent', icon: 'checkmark-outline' },
     ],
+    fieldName: 'baseline_consistency_level',
   },
   {
-    id: 'primary_obstacle',
-    question: 'What usually stops you?',
-    subtitle: 'This helps us design the right triggers and reminders',
+    id: '4',
+    title: 'What usually stops you?',
+    subtitle: 'What most often gets in your way?',
+    type: 'single',
     options: [
-      { value: 'lack_motivation', label: 'Lack of Motivation', icon: 'battery-dead-outline' },
-      { value: 'forgetting', label: 'Forgetting', icon: 'help-outline' },
-      { value: 'poor_planning', label: 'Poor Planning', icon: 'list-outline' },
-      { value: 'low_energy', label: 'Low Energy', icon: 'bed-outline' },
-      { value: 'distractions', label: 'Distractions (Phone, People, Noise)', icon: 'notifications-off-outline' },
-      { value: 'dont_know', label: "I Don't Know", icon: 'help-circle-outline' },
+      { id: 'lack_motivation', label: 'Lack of motivation', icon: 'battery-dead-outline' },
+      { id: 'forgetting', label: 'Forgetting', icon: 'cloud-outline' },
+      { id: 'poor_planning', label: 'Poor planning', icon: 'calendar-clear-outline' },
+      { id: 'low_energy', label: 'Low energy', icon: 'flash-off-outline' },
+      { id: 'distractions', label: 'Distractions (phone, people, noise)', icon: 'phone-portrait-outline' },
+      { id: 'dont_know', label: "I don't know", icon: 'help-outline' },
     ],
+    fieldName: 'primary_obstacle',
   },
   {
-    id: 'max_daily_effort_minutes',
-    question: 'How much daily effort can you give?',
-    subtitle: 'Be honest - we start below your limit, not at it',
+    id: '5',
+    title: 'How much daily effort are you realistically willing to give?',
+    subtitle: 'Be honest — how much effort can you commit every day?',
+    type: 'single',
     options: [
-      { value: '5', label: '2-5 Minutes', icon: 'time-outline' },
-      { value: '10', label: '5-10 Minutes', icon: 'time-outline' },
-      { value: '20', label: '10-20 Minutes', icon: 'time-outline' },
-      { value: '30', label: '20+ Minutes', icon: 'time-outline' },
+      { id: '5', label: '2–5 minutes', icon: 'time-outline' },
+      { id: '10', label: '5–10 minutes', icon: 'time-outline' },
+      { id: '20', label: '10–20 minutes', icon: 'time-outline' },
+      { id: '30', label: '20+ minutes', icon: 'time-outline' },
     ],
+    fieldName: 'max_daily_effort_minutes',
   },
   {
-    id: 'miss_response_type',
-    question: 'How do you respond when you miss a day?',
-    subtitle: 'This defines recovery logic and messaging tone',
+    id: '6',
+    title: 'How do you respond when you miss a day?',
+    subtitle: 'If you miss a habit once, what usually happens?',
+    type: 'single',
     options: [
-      { value: 'guilty_give_up', label: 'I Feel Guilty and Give Up', icon: 'sad-outline' },
-      { value: 'try_again', label: 'I Try Again the Next Day', icon: 'refresh-outline' },
-      { value: 'ignore_drift', label: 'I Ignore It and Drift Away', icon: 'cloudy-outline' },
-      { value: 'depends', label: 'It Depends on the Habit', icon: 'swap-horizontal-outline' },
+      { id: 'guilty_give_up', label: 'I feel guilty and give up', icon: 'sad-outline' },
+      { id: 'try_again', label: 'I try again the next day', icon: 'refresh-outline' },
+      { id: 'ignore_drift', label: 'I ignore it and drift away', icon: 'trending-down-outline' },
+      { id: 'depends', label: 'It depends on the habit', icon: 'swap-horizontal-outline' },
     ],
+    fieldName: 'miss_response_type',
   },
   {
-    id: 'coach_style_preference',
-    question: 'What do you want HabitGPT to be for you?',
-    subtitle: 'This controls notification language and coaching style',
+    id: '7',
+    title: 'What do you want HabitGPT to be for you?',
+    subtitle: 'How should HabitGPT behave?',
+    type: 'single',
     options: [
-      { value: 'gentle', label: 'Gentle and Encouraging', icon: 'heart-outline' },
-      { value: 'structured', label: 'Structured and Firm', icon: 'grid-outline' },
-      { value: 'strict', label: 'Strict and No-Excuses', icon: 'warning-outline' },
-      { value: 'adaptive', label: 'Adaptive (Changes Based on Performance)', icon: 'analytics-outline' },
+      { id: 'gentle', label: 'Gentle and encouraging', icon: 'heart-outline' },
+      { id: 'structured', label: 'Structured and firm', icon: 'grid-outline' },
+      { id: 'strict', label: 'Strict and no-excuses', icon: 'fitness-outline' },
+      { id: 'adaptive', label: 'Adaptive (changes based on performance)', icon: 'sync-outline' },
     ],
+    fieldName: 'coach_style_preference',
   },
 ];
+
+// ==================== MAIN COMPONENT ====================
 
 export default function OnboardingStep() {
   const { step } = useLocalSearchParams<{ step: string }>();
   const currentStep = parseInt(step || '1', 10);
-  const totalSteps = ONBOARDING_QUESTIONS.length;
+  const question = QUESTIONS[currentStep - 1];
+  
+  const {
+    onboardingProfile,
+    updateOnboardingProfile,
+    setOnboardingProfile,
+    setUser,
+    user,
+  } = useStore();
 
-  const { onboardingAnswers, setOnboardingAnswer, setOnboardingProfile, setIsLoading } = useStore();
-  const currentQuestion = ONBOARDING_QUESTIONS[currentStep - 1];
+  const [selectedSingle, setSelectedSingle] = useState<string | null>(
+    question.type === 'single' && onboardingProfile
+      ? (onboardingProfile as any)[question.fieldName] || null
+      : null
+  );
+  const [selectedMulti, setSelectedMulti] = useState<string[]>(
+    question.type === 'multi' && onboardingProfile
+      ? (onboardingProfile as any)[question.fieldName] || []
+      : []
+  );
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const currentValue = currentQuestion?.multiSelect
-    ? (onboardingAnswers[currentQuestion?.id] || [])
-    : (onboardingAnswers[currentQuestion?.id] || '');
+  const progress = currentStep / QUESTIONS.length;
+  const progressAnim = useRef(new Animated.Value(progress)).current;
 
-  const handleSelect = useCallback((value: string) => {
-    if (currentQuestion?.multiSelect) {
-      const current = Array.isArray(currentValue) ? currentValue : [];
-      const updated = current.includes(value)
-        ? current.filter((v: string) => v !== value)
-        : [...current, value];
-      setOnboardingAnswer(currentQuestion.id, updated);
-    } else {
-      setOnboardingAnswer(currentQuestion.id, value);
-    }
-  }, [currentQuestion, currentValue, setOnboardingAnswer]);
+  React.useEffect(() => {
+    Animated.timing(progressAnim, {
+      toValue: progress,
+      duration: 300,
+      useNativeDriver: false,
+    }).start();
+  }, [progress]);
 
-  const isSelected = (value: string) => {
-    if (currentQuestion?.multiSelect && Array.isArray(currentValue)) {
-      return currentValue.includes(value);
-    }
-    return currentValue === value;
+  const handleSingleSelect = (optionId: string) => {
+    setSelectedSingle(optionId);
   };
 
-  const canProceed = () => {
-    if (currentQuestion?.multiSelect) {
-      return Array.isArray(currentValue) && currentValue.length > 0;
-    }
-    return currentValue !== '';
-  };
-
-  const handleNext = async () => {
-    if (currentStep < totalSteps) {
-      router.push(`/onboarding/${currentStep + 1}`);
-    } else {
-      // Save onboarding profile
-      setIsLoading(true);
-      try {
-        const profile = await createOnboardingProfile({
-          primary_change_domain: onboardingAnswers.primary_change_domain,
-          failure_patterns: onboardingAnswers.failure_patterns || [],
-          baseline_consistency_level: onboardingAnswers.baseline_consistency_level,
-          primary_obstacle: onboardingAnswers.primary_obstacle,
-          max_daily_effort_minutes: parseInt(onboardingAnswers.max_daily_effort_minutes, 10),
-          miss_response_type: onboardingAnswers.miss_response_type,
-          coach_style_preference: onboardingAnswers.coach_style_preference,
-        });
-        setOnboardingProfile(profile);
-        router.replace('/auth');
-      } catch (error) {
-        console.error('Failed to save onboarding profile:', error);
-        router.replace('/auth');
-      } finally {
-        setIsLoading(false);
-      }
-    }
+  const handleMultiSelect = (optionId: string) => {
+    setSelectedMulti((prev) =>
+      prev.includes(optionId)
+        ? prev.filter((id) => id !== optionId)
+        : [...prev, optionId]
+    );
   };
 
   const handleBack = () => {
     if (currentStep > 1) {
-      router.back();
+      router.replace(`/onboarding/${currentStep - 1}`);
     } else {
       router.replace('/');
     }
   };
 
-  if (!currentQuestion) {
-    return null;
-  }
+  const handleNext = async () => {
+    // Update profile based on question type
+    if (question.type === 'single') {
+      const value = question.fieldName === 'max_daily_effort_minutes'
+        ? parseInt(selectedSingle || '10', 10)
+        : selectedSingle;
+      updateOnboardingProfile({ [question.fieldName]: value });
+    } else {
+      updateOnboardingProfile({ [question.fieldName]: selectedMulti });
+    }
+
+    if (currentStep < QUESTIONS.length) {
+      // Go to next question
+      router.replace(`/onboarding/${currentStep + 1}`);
+    } else {
+      // Final step - create user and profile
+      setIsSubmitting(true);
+      try {
+        // Get the final profile
+        const finalProfile = {
+          ...onboardingProfile,
+          [question.fieldName]: question.type === 'single'
+            ? (question.fieldName === 'max_daily_effort_minutes'
+              ? parseInt(selectedSingle || '10', 10)
+              : selectedSingle)
+            : selectedMulti,
+        };
+
+        // Create onboarding profile in backend
+        const createdProfile = await createOnboardingProfile({
+          primary_change_domain: finalProfile.primary_change_domain || '',
+          failure_patterns: finalProfile.failure_patterns || [],
+          baseline_consistency_level: finalProfile.baseline_consistency_level || '',
+          primary_obstacle: finalProfile.primary_obstacle || '',
+          max_daily_effort_minutes: finalProfile.max_daily_effort_minutes || 10,
+          miss_response_type: finalProfile.miss_response_type || '',
+          coach_style_preference: finalProfile.coach_style_preference || 'adaptive',
+        });
+
+        setOnboardingProfile(createdProfile);
+
+        // Create or get user (simplified - in production use Google auth)
+        const newUser = await createUser({
+          email: `user_${Date.now()}@habitgpt.app`,
+          name: 'HabitGPT User',
+        });
+
+        // Link profile to user
+        if (createdProfile.id) {
+          await linkOnboardingToUser(createdProfile.id, newUser.id);
+        }
+
+        // Update user with onboarding completed
+        const updatedUser = {
+          ...newUser,
+          onboarding_completed: true,
+          onboarding_profile_id: createdProfile.id,
+        };
+        setUser(updatedUser);
+
+        // Initialize notifications with user's coach style
+        await initializeNotifications(
+          updatedUser.id,
+          finalProfile.coach_style_preference || 'adaptive'
+        );
+
+        // Navigate to home
+        router.replace('/(tabs)/home');
+      } catch (error) {
+        console.error('Error completing onboarding:', error);
+        setIsSubmitting(false);
+        // Still navigate to home on error (will be guest user)
+        router.replace('/(tabs)/home');
+      }
+    }
+  };
+
+  const isNextDisabled = () => {
+    if (question.type === 'single') {
+      return !selectedSingle;
+    }
+    return selectedMulti.length === 0;
+  };
+
+  const getCoachStylePreview = () => {
+    if (question.fieldName !== 'coach_style_preference' || !selectedSingle) return null;
+    
+    const style = COACH_STYLES[selectedSingle as keyof typeof COACH_STYLES];
+    if (!style) return null;
+
+    return (
+      <View style={styles.coachPreview}>
+        <Text style={styles.coachPreviewLabel}>Preview:</Text>
+        <Text style={styles.coachPreviewText}>"{style.morningNotification}"</Text>
+      </View>
+    );
+  };
 
   return (
     <SafeAreaView style={styles.container}>
-      <KeyboardAvoidingView 
+      <KeyboardAvoidingView
         style={styles.keyboardView}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
         {/* Header */}
         <View style={styles.header}>
           <TouchableOpacity onPress={handleBack} style={styles.backButton}>
-            <Ionicons name="arrow-back" size={24} color={COLORS.textPrimary} />
+            <Ionicons name="arrow-back" size={22} color={COLORS.textPrimary} />
           </TouchableOpacity>
           <View style={styles.progressContainer}>
-            {Array.from({ length: totalSteps }).map((_, index) => (
-              <View
-                key={index}
-                style={[
-                  styles.progressDot,
-                  index < currentStep && styles.progressDotCompleted,
-                  index === currentStep - 1 && styles.progressDotCurrent,
-                ]}
-              />
-            ))}
+            <Animated.View
+              style={[
+                styles.progressBar,
+                {
+                  width: progressAnim.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: ['0%', '100%'],
+                  }),
+                },
+              ]}
+            />
           </View>
-          <View style={{ width: 40 }} />
+          <Text style={styles.stepIndicator}>
+            {currentStep}/{QUESTIONS.length}
+          </Text>
         </View>
 
-        {/* Question Content */}
-        <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-          <Text style={styles.stepText}>QUESTION {currentStep} OF {totalSteps}</Text>
-          <Text style={styles.question}>{currentQuestion.question}</Text>
-          {currentQuestion.subtitle && (
-            <Text style={styles.subtitle}>{currentQuestion.subtitle}</Text>
-          )}
+        {/* Question */}
+        <ScrollView
+          style={styles.content}
+          contentContainerStyle={styles.contentContainer}
+          showsVerticalScrollIndicator={false}
+        >
+          <Text style={styles.questionTitle}>{question.title}</Text>
+          <Text style={styles.questionSubtitle}>{question.subtitle}</Text>
 
           {/* Options */}
           <View style={styles.optionsContainer}>
-            {currentQuestion.options.map((option) => (
-              <TouchableOpacity
-                key={option.value}
-                style={[
-                  styles.option,
-                  isSelected(option.value) && styles.optionSelected,
-                ]}
-                onPress={() => handleSelect(option.value)}
-                activeOpacity={0.7}
-              >
-                <View style={styles.optionContent}>
-                  <View style={[
-                    styles.optionIcon,
-                    isSelected(option.value) && styles.optionIconSelected,
-                  ]}>
-                    <Ionicons
-                      name={option.icon as any}
-                      size={22}
-                      color={isSelected(option.value) ? COLORS.textLight : COLORS.textSecondary}
-                    />
-                  </View>
+            {question.options.map((option) => {
+              const isSelected =
+                question.type === 'single'
+                  ? selectedSingle === option.id
+                  : selectedMulti.includes(option.id);
+
+              return (
+                <TouchableOpacity
+                  key={option.id}
+                  style={[styles.optionCard, isSelected && styles.optionCardSelected]}
+                  onPress={() =>
+                    question.type === 'single'
+                      ? handleSingleSelect(option.id)
+                      : handleMultiSelect(option.id)
+                  }
+                  activeOpacity={0.7}
+                >
+                  {option.icon && (
+                    <View style={[
+                      styles.optionIconContainer,
+                      isSelected && styles.optionIconContainerSelected
+                    ]}>
+                      <Ionicons
+                        name={option.icon as any}
+                        size={22}
+                        color={isSelected ? COLORS.textLight : COLORS.textSecondary}
+                      />
+                    </View>
+                  )}
                   <Text
                     style={[
-                      styles.optionText,
-                      isSelected(option.value) && styles.optionTextSelected,
+                      styles.optionLabel,
+                      isSelected && styles.optionLabelSelected,
                     ]}
                   >
                     {option.label}
                   </Text>
-                </View>
-                <View
-                  style={[
-                    styles.checkbox,
-                    isSelected(option.value) && styles.checkboxSelected,
-                  ]}
-                >
-                  {isSelected(option.value) && (
-                    <Ionicons name="checkmark" size={16} color={COLORS.textLight} />
-                  )}
-                </View>
-              </TouchableOpacity>
-            ))}
+                  <View
+                    style={[
+                      question.type === 'single' ? styles.radioOuter : styles.checkboxOuter,
+                      isSelected && (question.type === 'single' ? styles.radioOuterSelected : styles.checkboxOuterSelected),
+                    ]}
+                  >
+                    {isSelected && (
+                      question.type === 'single' ? (
+                        <View style={styles.radioInner} />
+                      ) : (
+                        <Ionicons name="checkmark" size={14} color={COLORS.textLight} />
+                      )
+                    )}
+                  </View>
+                </TouchableOpacity>
+              );
+            })}
           </View>
+
+          {/* Multi-select hint */}
+          {question.type === 'multi' && (
+            <Text style={styles.multiHint}>
+              Select all that apply
+            </Text>
+          )}
+
+          {/* Coach style preview */}
+          {getCoachStylePreview()}
         </ScrollView>
 
-        {/* Footer */}
-        <View style={styles.footer}>
+        {/* CTA */}
+        <View style={styles.ctaContainer}>
           <TouchableOpacity
-            style={[
-              styles.nextButton,
-              !canProceed() && styles.nextButtonDisabled,
-            ]}
+            style={[styles.ctaButton, isNextDisabled() && styles.ctaButtonDisabled]}
             onPress={handleNext}
-            disabled={!canProceed()}
+            disabled={isNextDisabled() || isSubmitting}
             activeOpacity={0.8}
           >
-            <Text style={styles.nextButtonText}>
-              {currentStep === totalSteps ? 'Continue' : 'Next'}
+            <Text style={styles.ctaButtonText}>
+              {isSubmitting
+                ? 'Setting up...'
+                : currentStep === QUESTIONS.length
+                ? 'Start Your Journey'
+                : 'Continue'}
             </Text>
-            <Ionicons
-              name={currentStep === totalSteps ? 'checkmark' : 'arrow-forward'}
-              size={20}
-              color={COLORS.textLight}
-            />
+            {!isSubmitting && (
+              <Ionicons
+                name={currentStep === QUESTIONS.length ? 'checkmark' : 'arrow-forward'}
+                size={20}
+                color={COLORS.textLight}
+              />
+            )}
           </TouchableOpacity>
         </View>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
+
+// ==================== STYLES ====================
 
 const styles = StyleSheet.create({
   container: {
@@ -298,9 +443,9 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
     paddingHorizontal: SPACING.lg,
     paddingVertical: SPACING.md,
+    gap: SPACING.md,
   },
   backButton: {
     width: 40,
@@ -311,108 +456,146 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   progressContainer: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    gap: SPACING.xs,
-  },
-  progressDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
+    flex: 1,
+    height: 4,
     backgroundColor: COLORS.border,
+    borderRadius: BORDER_RADIUS.full,
+    overflow: 'hidden',
   },
-  progressDotCompleted: {
+  progressBar: {
+    height: '100%',
     backgroundColor: COLORS.primary,
+    borderRadius: BORDER_RADIUS.full,
   },
-  progressDotCurrent: {
-    width: 24,
-    backgroundColor: COLORS.primary,
+  stepIndicator: {
+    fontSize: FONTS.size.sm,
+    fontWeight: '600',
+    color: COLORS.textSecondary,
+    minWidth: 32,
+    textAlign: 'right',
   },
   content: {
     flex: 1,
-    paddingHorizontal: SPACING.lg,
   },
-  stepText: {
-    fontSize: FONTS.size.xs,
-    color: COLORS.primary,
-    letterSpacing: 2,
-    marginBottom: SPACING.sm,
-    fontWeight: '600',
+  contentContainer: {
+    paddingHorizontal: SPACING.xl,
+    paddingBottom: SPACING.xxl,
   },
-  question: {
+  questionTitle: {
     fontSize: FONTS.size.xxl,
-    fontWeight: 'bold',
+    fontWeight: '600',
     color: COLORS.textPrimary,
     marginBottom: SPACING.sm,
+    letterSpacing: -0.5,
   },
-  subtitle: {
+  questionSubtitle: {
     fontSize: FONTS.size.md,
     color: COLORS.textSecondary,
-    marginBottom: SPACING.lg,
-    lineHeight: 22,
+    marginBottom: SPACING.xl,
+    lineHeight: 24,
   },
   optionsContainer: {
     gap: SPACING.sm,
-    paddingBottom: SPACING.lg,
   },
-  option: {
+  optionCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
     backgroundColor: COLORS.backgroundCard,
-    borderRadius: BORDER_RADIUS.md,
+    borderRadius: BORDER_RADIUS.lg,
     padding: SPACING.md,
     borderWidth: 2,
-    borderColor: 'transparent',
+    borderColor: COLORS.border,
   },
-  optionSelected: {
+  optionCardSelected: {
     borderColor: COLORS.primary,
-    backgroundColor: COLORS.primary + '10',
+    backgroundColor: COLORS.backgroundDark,
   },
-  optionContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-  },
-  optionIcon: {
+  optionIconContainer: {
     width: 40,
     height: 40,
-    borderRadius: BORDER_RADIUS.sm,
-    backgroundColor: COLORS.backgroundDark,
+    borderRadius: BORDER_RADIUS.md,
+    backgroundColor: COLORS.backgroundLight,
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: SPACING.md,
   },
-  optionIconSelected: {
+  optionIconContainerSelected: {
     backgroundColor: COLORS.primary,
   },
-  optionText: {
+  optionLabel: {
+    flex: 1,
     fontSize: FONTS.size.md,
     color: COLORS.textPrimary,
-    flex: 1,
   },
-  optionTextSelected: {
-    color: COLORS.primary,
+  optionLabelSelected: {
     fontWeight: '600',
   },
-  checkbox: {
-    width: 24,
-    height: 24,
+  radioOuter: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    borderWidth: 2,
+    borderColor: COLORS.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  radioOuterSelected: {
+    borderColor: COLORS.primary,
+  },
+  radioInner: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: COLORS.primary,
+  },
+  checkboxOuter: {
+    width: 22,
+    height: 22,
     borderRadius: BORDER_RADIUS.sm,
     borderWidth: 2,
     borderColor: COLORS.border,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  checkboxSelected: {
-    backgroundColor: COLORS.primary,
+  checkboxOuterSelected: {
     borderColor: COLORS.primary,
+    backgroundColor: COLORS.primary,
   },
-  footer: {
-    paddingHorizontal: SPACING.lg,
-    paddingBottom: SPACING.lg,
+  multiHint: {
+    fontSize: FONTS.size.sm,
+    color: COLORS.textMuted,
+    textAlign: 'center',
+    marginTop: SPACING.md,
   },
-  nextButton: {
+  coachPreview: {
+    marginTop: SPACING.xl,
+    padding: SPACING.md,
+    backgroundColor: COLORS.backgroundCard,
+    borderRadius: BORDER_RADIUS.lg,
+    borderLeftWidth: 3,
+    borderLeftColor: COLORS.secondary,
+  },
+  coachPreviewLabel: {
+    fontSize: FONTS.size.xs,
+    fontWeight: '600',
+    color: COLORS.textMuted,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginBottom: SPACING.xs,
+  },
+  coachPreviewText: {
+    fontSize: FONTS.size.md,
+    color: COLORS.textPrimary,
+    fontStyle: 'italic',
+    lineHeight: 22,
+  },
+  ctaContainer: {
+    padding: SPACING.lg,
+    backgroundColor: COLORS.background,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.border,
+  },
+  ctaButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -421,10 +604,10 @@ const styles = StyleSheet.create({
     paddingVertical: SPACING.md,
     gap: SPACING.sm,
   },
-  nextButtonDisabled: {
+  ctaButtonDisabled: {
     backgroundColor: COLORS.border,
   },
-  nextButtonText: {
+  ctaButtonText: {
     fontSize: FONTS.size.lg,
     fontWeight: '600',
     color: COLORS.textLight,
