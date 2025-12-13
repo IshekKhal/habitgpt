@@ -12,10 +12,10 @@ import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useStore } from '../../src/store/useStore';
-import { COLORS, SPACING, FONTS, BORDER_RADIUS } from '../../src/constants/theme';
+import { COLORS, SPACING, FONTS, BORDER_RADIUS, COACH_STYLES } from '../../src/constants/theme';
 
 export default function ProfileScreen() {
-  const { user, onboardingProfile, setUser, setOnboardingProfile, setSkillInstances, resetOnboarding } = useStore();
+  const { user, onboardingProfile, setUser, setOnboardingProfile, setHabitInstances, resetOnboarding } = useStore();
 
   const handleLogout = () => {
     Alert.alert(
@@ -28,10 +28,10 @@ export default function ProfileScreen() {
           style: 'destructive',
           onPress: async () => {
             try {
-              await AsyncStorage.multiRemove(['skillgpt_user', 'skillgpt_profile', 'skillgpt_skills']);
+              await AsyncStorage.multiRemove(['habitgpt_user', 'habitgpt_profile', 'habitgpt_habits', 'habitgpt_subscription']);
               setUser(null);
               setOnboardingProfile(null);
-              setSkillInstances([]);
+              setHabitInstances([]);
               resetOnboarding();
               router.replace('/');
             } catch (error) {
@@ -43,27 +43,32 @@ export default function ProfileScreen() {
     );
   };
 
-  const getLearningStyleLabel = (pref: string) => {
+  const getChangeDomainLabel = (domain: string) => {
     const labels: Record<string, string> = {
-      videos: 'Videos',
-      articles: 'Articles',
-      hands_on: 'Hands-on',
-      quizzes: 'Quizzes',
-      step_by_step: 'Step-by-step',
+      sleep_energy: 'Sleep & Energy',
+      focus_productivity: 'Focus & Productivity',
+      health_fitness: 'Health & Fitness',
+      spiritual_mental: 'Spiritual / Mental Well-being',
+      discipline: 'Discipline & Consistency',
+      relationships: 'Relationships / Personal Conduct',
+      specific: 'Something Specific',
     };
-    return labels[pref] || pref;
+    return labels[domain] || domain;
   };
 
-  const getRoleLabel = (role: string) => {
+  const getConsistencyLabel = (level: string) => {
     const labels: Record<string, string> = {
-      school_student: 'School Student',
-      college_student: 'College Student',
-      working_professional: 'Working Professional',
-      freelancer: 'Freelancer',
-      unemployed: 'Between Roles',
-      other: 'Other',
+      very_inconsistent: 'Very Inconsistent',
+      somewhat_inconsistent: 'Somewhat Inconsistent',
+      mostly_consistent: 'Mostly Consistent',
+      extremely_consistent: 'Extremely Consistent',
     };
-    return labels[role] || role;
+    return labels[level] || level;
+  };
+
+  const getCoachStyleInfo = (style: string) => {
+    const coachStyle = COACH_STYLES[style as keyof typeof COACH_STYLES];
+    return coachStyle?.name || 'Adaptive';
   };
 
   return (
@@ -77,7 +82,7 @@ export default function ProfileScreen() {
         {/* User Card */}
         <View style={styles.userCard}>
           <View style={styles.avatar}>
-            <Ionicons name="person" size={40} color={COLORS.primary} />
+            <Ionicons name="person" size={36} color={COLORS.primary} />
           </View>
           <View style={styles.userInfo}>
             <Text style={styles.userName}>{user?.name || 'Guest'}</Text>
@@ -85,39 +90,33 @@ export default function ProfileScreen() {
           </View>
         </View>
 
-        {/* Profile Details */}
+        {/* Habit Profile */}
         {onboardingProfile && (
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Your Learning Profile</Text>
+            <Text style={styles.sectionTitle}>Your Habit Profile</Text>
             
             <View style={styles.detailRow}>
-              <Ionicons name="briefcase-outline" size={20} color={COLORS.textSecondary} />
-              <Text style={styles.detailLabel}>Role</Text>
-              <Text style={styles.detailValue}>{getRoleLabel(onboardingProfile.user_role)}</Text>
+              <Ionicons name="compass-outline" size={20} color={COLORS.textSecondary} />
+              <Text style={styles.detailLabel}>Focus Area</Text>
+              <Text style={styles.detailValue}>{getChangeDomainLabel(onboardingProfile.primary_change_domain)}</Text>
             </View>
 
             <View style={styles.detailRow}>
               <Ionicons name="time-outline" size={20} color={COLORS.textSecondary} />
-              <Text style={styles.detailLabel}>Daily Time</Text>
-              <Text style={styles.detailValue}>{onboardingProfile.daily_time_minutes} min</Text>
+              <Text style={styles.detailLabel}>Daily Effort</Text>
+              <Text style={styles.detailValue}>{onboardingProfile.max_daily_effort_minutes} min</Text>
             </View>
 
             <View style={styles.detailRow}>
-              <Ionicons name="location-outline" size={20} color={COLORS.textSecondary} />
-              <Text style={styles.detailLabel}>Location</Text>
-              <Text style={styles.detailValue}>{onboardingProfile.country}</Text>
+              <Ionicons name="trending-up-outline" size={20} color={COLORS.textSecondary} />
+              <Text style={styles.detailLabel}>Consistency</Text>
+              <Text style={styles.detailValue}>{getConsistencyLabel(onboardingProfile.baseline_consistency_level)}</Text>
             </View>
 
-            <View style={styles.preferencesRow}>
-              <Ionicons name="heart-outline" size={20} color={COLORS.textSecondary} />
-              <Text style={styles.detailLabel}>Learning Style</Text>
-            </View>
-            <View style={styles.preferenceTags}>
-              {onboardingProfile.learning_preferences?.map((pref) => (
-                <View key={pref} style={styles.preferenceTag}>
-                  <Text style={styles.preferenceTagText}>{getLearningStyleLabel(pref)}</Text>
-                </View>
-              ))}
+            <View style={styles.detailRow}>
+              <Ionicons name="chatbubble-outline" size={20} color={COLORS.textSecondary} />
+              <Text style={styles.detailLabel}>Coach Style</Text>
+              <Text style={styles.detailValue}>{getCoachStyleInfo(onboardingProfile.coach_style_preference)}</Text>
             </View>
           </View>
         )}
@@ -131,27 +130,27 @@ export default function ProfileScreen() {
             activeOpacity={0.7}
             onPress={() => router.push('/notification-settings')}
           >
-            <Ionicons name="notifications-outline" size={22} color={COLORS.textPrimary} />
+            <Ionicons name="notifications-outline" size={20} color={COLORS.textPrimary} />
             <Text style={styles.menuItemText}>Notifications</Text>
-            <Ionicons name="chevron-forward" size={20} color={COLORS.textMuted} />
+            <Ionicons name="chevron-forward" size={18} color={COLORS.textMuted} />
           </TouchableOpacity>
 
           <TouchableOpacity style={styles.menuItem} activeOpacity={0.7}>
-            <Ionicons name="card-outline" size={22} color={COLORS.textPrimary} />
+            <Ionicons name="card-outline" size={20} color={COLORS.textPrimary} />
             <Text style={styles.menuItemText}>Subscription</Text>
-            <Ionicons name="chevron-forward" size={20} color={COLORS.textMuted} />
+            <Ionicons name="chevron-forward" size={18} color={COLORS.textMuted} />
           </TouchableOpacity>
 
           <TouchableOpacity style={styles.menuItem} activeOpacity={0.7}>
-            <Ionicons name="help-circle-outline" size={22} color={COLORS.textPrimary} />
+            <Ionicons name="help-circle-outline" size={20} color={COLORS.textPrimary} />
             <Text style={styles.menuItemText}>Help & Support</Text>
-            <Ionicons name="chevron-forward" size={20} color={COLORS.textMuted} />
+            <Ionicons name="chevron-forward" size={18} color={COLORS.textMuted} />
           </TouchableOpacity>
 
           <TouchableOpacity style={styles.menuItem} activeOpacity={0.7}>
-            <Ionicons name="document-text-outline" size={22} color={COLORS.textPrimary} />
+            <Ionicons name="document-text-outline" size={20} color={COLORS.textPrimary} />
             <Text style={styles.menuItemText}>Terms & Privacy</Text>
-            <Ionicons name="chevron-forward" size={20} color={COLORS.textMuted} />
+            <Ionicons name="chevron-forward" size={18} color={COLORS.textMuted} />
           </TouchableOpacity>
         </View>
 
@@ -161,11 +160,11 @@ export default function ProfileScreen() {
           onPress={handleLogout}
           activeOpacity={0.8}
         >
-          <Ionicons name="log-out-outline" size={22} color={COLORS.error} />
+          <Ionicons name="log-out-outline" size={20} color={COLORS.error} />
           <Text style={styles.logoutText}>Log Out</Text>
         </TouchableOpacity>
 
-        <Text style={styles.version}>Version 1.0.0</Text>
+        <Text style={styles.version}>HabitGPT v1.0.0</Text>
       </ScrollView>
     </SafeAreaView>
   );
@@ -178,29 +177,30 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
-    paddingHorizontal: SPACING.lg,
+    paddingHorizontal: SPACING.xl,
   },
   header: {
-    paddingVertical: SPACING.md,
+    paddingVertical: SPACING.lg,
   },
   title: {
     fontSize: FONTS.size.xxl,
-    fontWeight: 'bold',
+    fontWeight: '600',
     color: COLORS.textPrimary,
+    letterSpacing: -0.5,
   },
   userCard: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: COLORS.backgroundCard,
-    borderRadius: BORDER_RADIUS.lg,
+    borderRadius: BORDER_RADIUS.xl,
     padding: SPACING.lg,
     marginBottom: SPACING.lg,
   },
   avatar: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    backgroundColor: COLORS.primary + '20',
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: COLORS.backgroundDark,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -210,7 +210,7 @@ const styles = StyleSheet.create({
   },
   userName: {
     fontSize: FONTS.size.lg,
-    fontWeight: 'bold',
+    fontWeight: '600',
     color: COLORS.textPrimary,
   },
   userEmail: {
@@ -222,16 +222,18 @@ const styles = StyleSheet.create({
     marginBottom: SPACING.lg,
   },
   sectionTitle: {
-    fontSize: FONTS.size.md,
+    fontSize: FONTS.size.sm,
     fontWeight: '600',
-    color: COLORS.textSecondary,
+    color: COLORS.textMuted,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
     marginBottom: SPACING.md,
   },
   detailRow: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: COLORS.backgroundCard,
-    borderRadius: BORDER_RADIUS.md,
+    borderRadius: BORDER_RADIUS.lg,
     padding: SPACING.md,
     marginBottom: SPACING.sm,
   },
@@ -242,35 +244,14 @@ const styles = StyleSheet.create({
     marginLeft: SPACING.md,
   },
   detailValue: {
-    fontSize: FONTS.size.md,
-    color: COLORS.textSecondary,
-  },
-  preferencesRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: SPACING.sm,
-  },
-  preferenceTags: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: SPACING.xs,
-  },
-  preferenceTag: {
-    backgroundColor: COLORS.primary + '20',
-    borderRadius: BORDER_RADIUS.full,
-    paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.xs,
-  },
-  preferenceTagText: {
     fontSize: FONTS.size.sm,
-    color: COLORS.primary,
-    fontWeight: '500',
+    color: COLORS.textSecondary,
   },
   menuItem: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: COLORS.backgroundCard,
-    borderRadius: BORDER_RADIUS.md,
+    borderRadius: BORDER_RADIUS.lg,
     padding: SPACING.md,
     marginBottom: SPACING.sm,
   },
@@ -284,8 +265,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: COLORS.error + '15',
-    borderRadius: BORDER_RADIUS.md,
+    backgroundColor: COLORS.backgroundCard,
+    borderRadius: BORDER_RADIUS.lg,
     padding: SPACING.md,
     gap: SPACING.sm,
     marginTop: SPACING.md,

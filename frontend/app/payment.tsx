@@ -11,16 +11,16 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useStore } from '../src/store/useStore';
-import { createSkillInstance, startTrial } from '../src/services/api';
-import { COLORS, SPACING, FONTS, BORDER_RADIUS } from '../src/constants/theme';
+import { createHabitInstance, startTrial } from '../src/services/api';
+import { COLORS, SPACING, FONTS, BORDER_RADIUS, MICROCOPY } from '../src/constants/theme';
 
 export default function PaymentScreen() {
-  const { user, pendingSkill, clearChatHistory, addSkillInstance, setUser, setPendingSkill } = useStore();
+  const { user, pendingHabit, clearChatHistory, addHabitInstance, setUser, setPendingHabit } = useStore();
   const [isLoading, setIsLoading] = useState(false);
   const [isStartingTrial, setIsStartingTrial] = useState(false);
 
   const handleStartLearning = async () => {
-    if (!user?.id || !pendingSkill) return;
+    if (!user?.id || !pendingHabit) return;
 
     setIsLoading(true);
 
@@ -32,23 +32,23 @@ export default function PaymentScreen() {
         setUser({ ...user, trial_started: true });
       }
 
-      // Create skill instance with roadmap
-      const skillInstance = await createSkillInstance({
+      // Create habit instance with roadmap
+      const habitInstance = await createHabitInstance({
         user_id: user.id,
-        skill_name: pendingSkill.name,
-        skill_description: `Learning ${pendingSkill.name} with AI-generated roadmap`,
-        category: pendingSkill.category,
-        duration_days: 90,
+        habit_name: pendingHabit.name,
+        habit_description: `Building ${pendingHabit.name} over 29 days`,
+        category: pendingHabit.category,
+        duration_days: 29,
       });
 
-      addSkillInstance(skillInstance);
+      addHabitInstance(habitInstance);
       clearChatHistory();
-      setPendingSkill(null);
+      setPendingHabit(null);
 
       // Navigate to roadmap with isNew flag to trigger paywall
-      router.replace(`/skill-roadmap/${skillInstance.id}?isNew=true`);
+      router.replace(`/habit-roadmap/${habitInstance.id}?isNew=true`);
     } catch (error) {
-      console.error('Failed to start learning:', error);
+      console.error('Failed to start habit:', error);
     } finally {
       setIsLoading(false);
       setIsStartingTrial(false);
@@ -56,7 +56,7 @@ export default function PaymentScreen() {
   };
 
   const handleClose = () => {
-    setPendingSkill(null);
+    setPendingHabit(null);
     clearChatHistory();
     router.back();
   };
@@ -66,50 +66,50 @@ export default function PaymentScreen() {
       <ScrollView contentContainerStyle={styles.scrollContent}>
         {/* Close Button */}
         <TouchableOpacity onPress={handleClose} style={styles.closeButton}>
-          <Ionicons name="close" size={24} color={COLORS.textPrimary} />
+          <Ionicons name="close" size={22} color={COLORS.textPrimary} />
         </TouchableOpacity>
 
         {/* Header Section */}
         <View style={styles.header}>
           <View style={styles.iconContainer}>
-            <Ionicons name="gift" size={48} color={COLORS.secondary} />
+            <Ionicons name="sparkles" size={44} color={COLORS.secondary} />
           </View>
-          <Text style={styles.title}>Your First Skill is FREE!</Text>
+          <Text style={styles.title}>{MICROCOPY.firstHabit.title}</Text>
           <Text style={styles.subtitle}>
-            Start learning <Text style={styles.highlight}>{pendingSkill?.name}</Text> today with a 90-day free trial
+            Start building <Text style={styles.highlight}>{pendingHabit?.name}</Text> today
           </Text>
         </View>
 
         {/* Features */}
         <View style={styles.featuresContainer}>
           <View style={styles.featureItem}>
-            <Ionicons name="checkmark-circle" size={24} color={COLORS.secondary} />
-            <Text style={styles.featureText}>Personalized AI roadmap</Text>
+            <Ionicons name="checkmark-circle" size={22} color={COLORS.secondary} />
+            <Text style={styles.featureText}>Personalized 29-day roadmap</Text>
           </View>
           <View style={styles.featureItem}>
-            <Ionicons name="checkmark-circle" size={24} color={COLORS.secondary} />
-            <Text style={styles.featureText}>Daily tasks and progress tracking</Text>
+            <Ionicons name="checkmark-circle" size={22} color={COLORS.secondary} />
+            <Text style={styles.featureText}>Daily micro-tasks that build habits</Text>
           </View>
           <View style={styles.featureItem}>
-            <Ionicons name="checkmark-circle" size={24} color={COLORS.secondary} />
-            <Text style={styles.featureText}>Curated learning resources</Text>
+            <Ionicons name="checkmark-circle" size={22} color={COLORS.secondary} />
+            <Text style={styles.featureText}>Coach-style reminders & support</Text>
           </View>
           <View style={styles.featureItem}>
-            <Ionicons name="checkmark-circle" size={24} color={COLORS.secondary} />
-            <Text style={styles.featureText}>Push notifications for reminders</Text>
+            <Ionicons name="checkmark-circle" size={22} color={COLORS.secondary} />
+            <Text style={styles.featureText}>Streak tracking & milestones</Text>
           </View>
         </View>
 
         {/* Pricing Info */}
         <View style={styles.pricingCard}>
           <View style={styles.pricingHeader}>
-            <Text style={styles.pricingTitle}>90-Day Free Trial</Text>
+            <Text style={styles.pricingTitle}>29-Day Free Trial</Text>
             <View style={styles.priceBadge}>
-              <Text style={styles.priceBadgeText}>FIRST SKILL FREE</Text>
+              <Text style={styles.priceBadgeText}>FIRST HABIT FREE</Text>
             </View>
           </View>
           <Text style={styles.pricingDescription}>
-            After your trial ends, continue learning for just
+            After your trial, continue growing habits for
           </Text>
           <View style={styles.priceRow}>
             <Text style={styles.priceAmount}>$19.99</Text>
@@ -122,16 +122,16 @@ export default function PaymentScreen() {
 
         {/* Payment Method Placeholder */}
         <TouchableOpacity style={styles.paymentMethodCard} activeOpacity={0.8}>
-          <Ionicons name="card-outline" size={24} color={COLORS.textSecondary} />
+          <Ionicons name="card-outline" size={22} color={COLORS.textSecondary} />
           <View style={styles.paymentMethodText}>
             <Text style={styles.paymentMethodTitle}>Add Payment Method</Text>
             <Text style={styles.paymentMethodSubtitle}>Required to start free trial</Text>
           </View>
-          <Ionicons name="chevron-forward" size={20} color={COLORS.textMuted} />
+          <Ionicons name="chevron-forward" size={18} color={COLORS.textMuted} />
         </TouchableOpacity>
 
         <Text style={styles.disclaimer}>
-          Payment information is securely stored via RevenueCat. You won't be charged until after your 90-day trial period ends.
+          Payment is securely stored via RevenueCat. You won't be charged until your 29-day trial ends.
         </Text>
       </ScrollView>
 
@@ -145,15 +145,15 @@ export default function PaymentScreen() {
         >
           {isLoading ? (
             <View style={styles.loadingContainer}>
-              <ActivityIndicator color={COLORS.textPrimary} />
+              <ActivityIndicator color={COLORS.textLight} />
               <Text style={styles.ctaButtonText}>
-                {isStartingTrial ? 'Starting Trial...' : 'Generating Roadmap...'}
+                {isStartingTrial ? 'Starting trial...' : 'Creating your roadmap...'}
               </Text>
             </View>
           ) : (
             <>
-              <Text style={styles.ctaButtonText}>Start Learning Free</Text>
-              <Ionicons name="arrow-forward" size={20} color={COLORS.textPrimary} />
+              <Text style={styles.ctaButtonText}>Start Building This Habit</Text>
+              <Ionicons name="arrow-forward" size={20} color={COLORS.textLight} />
             </>
           )}
         </TouchableOpacity>
@@ -168,8 +168,8 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.background,
   },
   scrollContent: {
-    paddingHorizontal: SPACING.lg,
-    paddingBottom: 120,
+    paddingHorizontal: SPACING.xl,
+    paddingBottom: 140,
   },
   closeButton: {
     width: 40,
@@ -185,20 +185,21 @@ const styles = StyleSheet.create({
     paddingVertical: SPACING.xl,
   },
   iconContainer: {
-    width: 96,
-    height: 96,
+    width: 88,
+    height: 88,
     borderRadius: 24,
-    backgroundColor: COLORS.secondary + '20',
+    backgroundColor: COLORS.backgroundCard,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: SPACING.lg,
   },
   title: {
     fontSize: FONTS.size.xxl,
-    fontWeight: 'bold',
+    fontWeight: '600',
     color: COLORS.textPrimary,
     marginBottom: SPACING.sm,
     textAlign: 'center',
+    letterSpacing: -0.5,
   },
   subtitle: {
     fontSize: FONTS.size.md,
@@ -207,7 +208,7 @@ const styles = StyleSheet.create({
     lineHeight: 24,
   },
   highlight: {
-    color: COLORS.primary,
+    color: COLORS.textPrimary,
     fontWeight: '600',
   },
   featuresContainer: {
@@ -225,11 +226,9 @@ const styles = StyleSheet.create({
   },
   pricingCard: {
     backgroundColor: COLORS.backgroundCard,
-    borderRadius: BORDER_RADIUS.lg,
+    borderRadius: BORDER_RADIUS.xl,
     padding: SPACING.lg,
     marginBottom: SPACING.lg,
-    borderWidth: 1,
-    borderColor: COLORS.primary + '40',
   },
   pricingHeader: {
     flexDirection: 'row',
@@ -239,19 +238,19 @@ const styles = StyleSheet.create({
   },
   pricingTitle: {
     fontSize: FONTS.size.lg,
-    fontWeight: 'bold',
+    fontWeight: '600',
     color: COLORS.textPrimary,
   },
   priceBadge: {
     backgroundColor: COLORS.secondary,
     borderRadius: BORDER_RADIUS.sm,
     paddingHorizontal: SPACING.sm,
-    paddingVertical: SPACING.xs,
+    paddingVertical: 4,
   },
   priceBadgeText: {
     fontSize: FONTS.size.xs,
-    fontWeight: 'bold',
-    color: COLORS.textPrimary,
+    fontWeight: '700',
+    color: COLORS.textLight,
   },
   pricingDescription: {
     fontSize: FONTS.size.sm,
@@ -265,7 +264,7 @@ const styles = StyleSheet.create({
   },
   priceAmount: {
     fontSize: FONTS.size.xxxl,
-    fontWeight: 'bold',
+    fontWeight: '600',
     color: COLORS.textPrimary,
   },
   pricePeriod: {
@@ -281,7 +280,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: COLORS.backgroundCard,
-    borderRadius: BORDER_RADIUS.md,
+    borderRadius: BORDER_RADIUS.lg,
     padding: SPACING.md,
     marginBottom: SPACING.md,
     borderWidth: 1,
@@ -327,12 +326,12 @@ const styles = StyleSheet.create({
     gap: SPACING.sm,
   },
   ctaButtonDisabled: {
-    backgroundColor: COLORS.primary + '80',
+    opacity: 0.7,
   },
   ctaButtonText: {
     fontSize: FONTS.size.lg,
     fontWeight: '600',
-    color: COLORS.textPrimary,
+    color: COLORS.textLight,
   },
   loadingContainer: {
     flexDirection: 'row',
