@@ -82,10 +82,23 @@ export interface ChatMessage {
   content: string;
 }
 
+export interface SubscriptionStatus {
+  isSubscribed: boolean;
+  isTrialActive: boolean;
+  trialEndDate?: string;
+  expirationDate?: string;
+  productId?: string;
+  willRenew: boolean;
+}
+
 interface AppState {
   // User state
   user: User | null;
   setUser: (user: User | null) => void;
+  
+  // Subscription state
+  subscriptionStatus: SubscriptionStatus;
+  setSubscriptionStatus: (status: SubscriptionStatus) => void;
   
   // Onboarding state
   onboardingProfile: OnboardingProfile | null;
@@ -126,6 +139,17 @@ export const useStore = create<AppState>((set, get) => ({
   user: null,
   setUser: (user) => {
     set({ user });
+    get().saveToStorage();
+  },
+  
+  // Subscription state
+  subscriptionStatus: {
+    isSubscribed: false,
+    isTrialActive: false,
+    willRenew: false,
+  },
+  setSubscriptionStatus: (status) => {
+    set({ subscriptionStatus: status });
     get().saveToStorage();
   },
   
