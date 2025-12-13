@@ -190,9 +190,9 @@ export default function OnboardingStep() {
 
   const handleBack = () => {
     if (currentStep > 1) {
-      router.replace(`/onboarding/${currentStep - 1}`);
+      router.push(`/onboarding/${currentStep - 1}`);
     } else {
-      router.replace('/');
+      router.back();
     }
   };
 
