@@ -45,8 +45,8 @@ export default function PaymentScreen() {
       clearChatHistory();
       setPendingSkill(null);
 
-      // Navigate to roadmap
-      router.replace(`/skill-roadmap/${skillInstance.id}`);
+      // Navigate to roadmap with isNew flag to trigger paywall
+      router.replace(`/skill-roadmap/${skillInstance.id}?isNew=true`);
     } catch (error) {
       console.error('Failed to start learning:', error);
     } finally {
