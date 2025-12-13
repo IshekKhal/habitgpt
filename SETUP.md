@@ -12,10 +12,11 @@ SkillGPT is a React Native (iOS + Android) app that helps users learn any skill 
 4. [Supabase Setup & SQL Schemas](#supabase-setup--sql-schemas)
 5. [Google OAuth Setup](#google-oauth-setup)
 6. [RevenueCat Setup](#revenuecat-setup)
-7. [Running the Application](#running-the-application)
-8. [Feature Walkthrough](#feature-walkthrough)
-9. [API Reference](#api-reference)
-10. [Troubleshooting](#troubleshooting)
+7. [Push Notifications Setup](#push-notifications-setup)
+8. [Running the Application](#running-the-application)
+9. [Feature Walkthrough](#feature-walkthrough)
+10. [API Reference](#api-reference)
+11. [Troubleshooting](#troubleshooting)
 
 ---
 
