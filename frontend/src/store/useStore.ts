@@ -3,14 +3,13 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export interface OnboardingProfile {
   id?: string;
-  user_role: string;
-  age_range: string;
-  country: string;
-  timezone: string;
-  daily_time_minutes: number;
-  learning_preferences: string[];
-  learning_history_type: string;
-  motivation_type: string;
+  primary_change_domain: string;
+  failure_patterns: string[];
+  baseline_consistency_level: string;
+  primary_obstacle: string;
+  max_daily_effort_minutes: number;
+  miss_response_type: string;
+  coach_style_preference: string;
 }
 
 export interface User {
@@ -51,7 +50,7 @@ export interface Resource {
   description: string;
 }
 
-export interface SkillRoadmap {
+export interface HabitRoadmap {
   overview: string;
   total_days: number;
   milestones: Array<{
@@ -63,18 +62,20 @@ export interface SkillRoadmap {
   resources: Resource[];
 }
 
-export interface SkillInstance {
+export interface HabitInstance {
   id: string;
   user_id: string;
-  skill_name: string;
-  skill_description: string;
+  habit_name: string;
+  habit_description: string;
   category: string;
   duration_days: number;
   start_date: string;
   end_date?: string;
   status: string;
   completion_percentage: number;
-  roadmap?: SkillRoadmap;
+  current_streak: number;
+  longest_streak: number;
+  roadmap?: HabitRoadmap;
 }
 
 export interface ChatMessage {
@@ -109,21 +110,21 @@ interface AppState {
   setOnboardingAnswer: (key: string, value: any) => void;
   resetOnboarding: () => void;
   
-  // Skills state
-  skillInstances: SkillInstance[];
-  setSkillInstances: (instances: SkillInstance[]) => void;
-  addSkillInstance: (instance: SkillInstance) => void;
-  removeSkillInstance: (instanceId: string) => void;
-  updateSkillInstance: (instanceId: string, updates: Partial<SkillInstance>) => void;
+  // Habits state
+  habitInstances: HabitInstance[];
+  setHabitInstances: (instances: HabitInstance[]) => void;
+  addHabitInstance: (instance: HabitInstance) => void;
+  removeHabitInstance: (instanceId: string) => void;
+  updateHabitInstance: (instanceId: string, updates: Partial<HabitInstance>) => void;
   
   // Chat state
   currentChatHistory: ChatMessage[];
   addChatMessage: (message: ChatMessage) => void;
   clearChatHistory: () => void;
   
-  // Pending skill from chat
-  pendingSkill: { name: string; category: string } | null;
-  setPendingSkill: (skill: { name: string; category: string } | null) => void;
+  // Pending habit from chat
+  pendingHabit: { name: string; category: string } | null;
+  setPendingHabit: (habit: { name: string; category: string } | null) => void;
   
   // Loading states
   isLoading: boolean;
@@ -174,27 +175,27 @@ export const useStore = create<AppState>((set, get) => ({
     });
   },
   
-  // Skills state
-  skillInstances: [],
-  setSkillInstances: (instances) => {
-    set({ skillInstances: instances });
+  // Habits state
+  habitInstances: [],
+  setHabitInstances: (instances) => {
+    set({ habitInstances: instances });
     get().saveToStorage();
   },
-  addSkillInstance: (instance) => {
+  addHabitInstance: (instance) => {
     set((state) => ({
-      skillInstances: [...state.skillInstances, instance],
+      habitInstances: [...state.habitInstances, instance],
     }));
     get().saveToStorage();
   },
-  removeSkillInstance: (instanceId) => {
+  removeHabitInstance: (instanceId) => {
     set((state) => ({
-      skillInstances: state.skillInstances.filter((i) => i.id !== instanceId),
+      habitInstances: state.habitInstances.filter((i) => i.id !== instanceId),
     }));
     get().saveToStorage();
   },
-  updateSkillInstance: (instanceId, updates) => {
+  updateHabitInstance: (instanceId, updates) => {
     set((state) => ({
-      skillInstances: state.skillInstances.map((i) =>
+      habitInstances: state.habitInstances.map((i) =>
         i.id === instanceId ? { ...i, ...updates } : i
       ),
     }));
@@ -210,9 +211,9 @@ export const useStore = create<AppState>((set, get) => ({
   },
   clearChatHistory: () => set({ currentChatHistory: [] }),
   
-  // Pending skill
-  pendingSkill: null,
-  setPendingSkill: (skill) => set({ pendingSkill: skill }),
+  // Pending habit
+  pendingHabit: null,
+  setPendingHabit: (habit) => set({ pendingHabit: habit }),
   
   // Loading states
   isLoading: false,
@@ -221,23 +222,26 @@ export const useStore = create<AppState>((set, get) => ({
   // Persistence
   loadFromStorage: async () => {
     try {
-      const userData = await AsyncStorage.getItem('skillgpt_user');
-      const profileData = await AsyncStorage.getItem('skillgpt_profile');
-      const skillsData = await AsyncStorage.getItem('skillgpt_skills');
+      const userData = await AsyncStorage.getItem('habitgpt_user');
+      const profileData = await AsyncStorage.getItem('habitgpt_profile');
+      const habitsData = await AsyncStorage.getItem('habitgpt_habits');
+      const subscriptionData = await AsyncStorage.getItem('habitgpt_subscription');
       
       if (userData) set({ user: JSON.parse(userData) });
       if (profileData) set({ onboardingProfile: JSON.parse(profileData) });
-      if (skillsData) set({ skillInstances: JSON.parse(skillsData) });
+      if (habitsData) set({ habitInstances: JSON.parse(habitsData) });
+      if (subscriptionData) set({ subscriptionStatus: JSON.parse(subscriptionData) });
     } catch (error) {
       console.error('Failed to load from storage:', error);
     }
   },
   saveToStorage: async () => {
     try {
-      const { user, onboardingProfile, skillInstances } = get();
-      if (user) await AsyncStorage.setItem('skillgpt_user', JSON.stringify(user));
-      if (onboardingProfile) await AsyncStorage.setItem('skillgpt_profile', JSON.stringify(onboardingProfile));
-      if (skillInstances.length > 0) await AsyncStorage.setItem('skillgpt_skills', JSON.stringify(skillInstances));
+      const { user, onboardingProfile, habitInstances, subscriptionStatus } = get();
+      if (user) await AsyncStorage.setItem('habitgpt_user', JSON.stringify(user));
+      if (onboardingProfile) await AsyncStorage.setItem('habitgpt_profile', JSON.stringify(onboardingProfile));
+      if (habitInstances.length > 0) await AsyncStorage.setItem('habitgpt_habits', JSON.stringify(habitInstances));
+      if (subscriptionStatus) await AsyncStorage.setItem('habitgpt_subscription', JSON.stringify(subscriptionStatus));
     } catch (error) {
       console.error('Failed to save to storage:', error);
     }
