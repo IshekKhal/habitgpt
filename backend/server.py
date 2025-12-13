@@ -1,7 +1,7 @@
-from fastapi import FastAPI, APIRouter, HTTPException, Depends
+from fastapi import FastAPI, APIRouter, HTTPException
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
-from motor.motor_asyncio import AsyncIOMotorClient
+from supabase import create_client, Client
 import os
 import logging
 from pathlib import Path
@@ -15,10 +15,15 @@ import google.generativeai as genai
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
 
-# MongoDB connection
-mongo_url = os.environ['MONGO_URL']
-client = AsyncIOMotorClient(mongo_url)
-db = client[os.environ.get('DB_NAME', 'habitgpt_db')]
+# Supabase connection
+SUPABASE_URL = os.environ.get('SUPABASE_URL', '')
+SUPABASE_KEY = os.environ.get('SUPABASE_SERVICE_KEY', os.environ.get('SUPABASE_ANON_KEY', ''))
+
+if not SUPABASE_URL or not SUPABASE_KEY:
+    logging.warning("Supabase credentials not set. Database operations will fail.")
+    supabase: Optional[Client] = None
+else:
+    supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 # Configure Gemini with user-provided API key
 GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY', '')
@@ -28,7 +33,7 @@ else:
     logging.warning("GEMINI_API_KEY not set. AI features will not work.")
 
 # Create the main app
-app = FastAPI(title="HabitGPT API")
+app = FastAPI(title="HabitGPT API", version="1.0.0")
 
 # Create a router with the /api prefix
 api_router = APIRouter(prefix="/api")
@@ -81,19 +86,7 @@ COACH_STYLES = {
     },
 }
 
-# ==================== MODELS ====================
-
-class OnboardingProfile(BaseModel):
-    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    user_id: Optional[str] = None
-    primary_change_domain: str  # sleep_energy, focus_productivity, health_fitness, etc.
-    failure_patterns: List[str] = []  # mornings, evenings, weekends, etc.
-    baseline_consistency_level: str  # very_inconsistent, somewhat_inconsistent, etc.
-    primary_obstacle: str  # lack_motivation, forgetting, poor_planning, etc.
-    max_daily_effort_minutes: int  # 5, 10, 20, 30
-    miss_response_type: str  # guilty_give_up, try_again, ignore_drift, depends
-    coach_style_preference: str  # gentle, structured, strict, adaptive
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+# ==================== PYDANTIC MODELS ====================
 
 class OnboardingProfileCreate(BaseModel):
     primary_change_domain: str
@@ -104,18 +97,17 @@ class OnboardingProfileCreate(BaseModel):
     miss_response_type: str
     coach_style_preference: str
 
-class User(BaseModel):
-    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    email: str
-    name: str
-    google_id: Optional[str] = None
-    avatar_url: Optional[str] = None
-    onboarding_completed: bool = False
-    onboarding_profile_id: Optional[str] = None
-    trial_started: bool = False
-    trial_start_date: Optional[datetime] = None
-    subscription_active: bool = False
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+class OnboardingProfileResponse(BaseModel):
+    id: str
+    user_id: Optional[str] = None
+    primary_change_domain: str
+    failure_patterns: List[str] = []
+    baseline_consistency_level: str
+    primary_obstacle: str
+    max_daily_effort_minutes: int
+    miss_response_type: str
+    coach_style_preference: str
+    created_at: Optional[str] = None
 
 class UserCreate(BaseModel):
     email: str
@@ -123,62 +115,21 @@ class UserCreate(BaseModel):
     google_id: Optional[str] = None
     avatar_url: Optional[str] = None
 
-class DailyTask(BaseModel):
-    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    title: str
-    description: str
-    estimated_minutes: int
-    resource_links: List[str] = []
-    completed: bool = False
-    completed_at: Optional[datetime] = None
-
-class DayPlan(BaseModel):
-    day_number: int
-    date: Optional[str] = None
-    tasks: List[DailyTask]
-    completion_percentage: float = 0.0
-
-class Resource(BaseModel):
-    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    type: str  # youtube, article, document
-    title: str
-    url: str
-    description: str
-
-class HabitRoadmap(BaseModel):
-    overview: str
-    total_days: int
-    milestones: List[Dict[str, Any]]
-    day_plans: List[DayPlan]
-    resources: List[Resource]
-
-class HabitInstance(BaseModel):
-    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    user_id: str
-    habit_name: str
-    habit_description: str
-    category: str
-    duration_days: int = 29
-    start_date: datetime = Field(default_factory=datetime.utcnow)
-    end_date: Optional[datetime] = None
-    status: str = "active"  # active, completed, paused
-    completion_percentage: float = 0.0
-    current_streak: int = 0
-    longest_streak: int = 0
-    last_completed_date: Optional[datetime] = None
-    roadmap: Optional[HabitRoadmap] = None
-    chat_history: List[Dict[str, str]] = []
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-
-class HabitInstanceCreate(BaseModel):
-    user_id: str
-    habit_name: str
-    habit_description: str
-    category: str
-    duration_days: int = 29
+class UserResponse(BaseModel):
+    id: str
+    email: str
+    name: str
+    google_id: Optional[str] = None
+    avatar_url: Optional[str] = None
+    onboarding_completed: bool = False
+    onboarding_profile_id: Optional[str] = None
+    trial_started: bool = False
+    trial_start_date: Optional[str] = None
+    subscription_active: bool = False
+    created_at: Optional[str] = None
 
 class ChatMessage(BaseModel):
-    role: str  # user or assistant
+    role: str
     content: str
 
 class ChatRequest(BaseModel):
@@ -187,15 +138,46 @@ class ChatRequest(BaseModel):
     message: str
     chat_history: List[ChatMessage] = []
 
+class HabitInstanceCreate(BaseModel):
+    user_id: str
+    habit_name: str
+    habit_description: str
+    category: str
+    duration_days: int = 29
+
 class TaskCompletionRequest(BaseModel):
     task_id: str
     day_number: int
+
+class RegisterPushTokenRequest(BaseModel):
+    user_id: str
+    push_token: str
+    platform: str
+
+class UpdateNotificationPrefsRequest(BaseModel):
+    daily_reminders: Optional[bool] = None
+    morning_time: Optional[str] = None
+    afternoon_time: Optional[str] = None
+    evening_time: Optional[str] = None
+    milestone_alerts: Optional[bool] = None
+    streak_notifications: Optional[bool] = None
+
+class UpdateSubscriptionRequest(BaseModel):
+    is_subscribed: bool
+    is_trial_active: Optional[bool] = None
+    trial_end_date: Optional[str] = None
+    expiration_date: Optional[str] = None
+    product_id: Optional[str] = None
+    will_renew: Optional[bool] = None
 
 # ==================== HELPER FUNCTIONS ====================
 
 def get_gemini_model():
     """Get the Gemini model for chat"""
     return genai.GenerativeModel('gemini-2.5-flash')
+
+def generate_uuid() -> str:
+    return str(uuid.uuid4())
 
 async def generate_habit_clarification(user_message: str, chat_history: List[Dict[str, str]], onboarding_profile: Optional[dict] = None):
     """Generate clarifying questions for habit selection using Gemini"""
@@ -205,10 +187,13 @@ async def generate_habit_clarification(user_message: str, chat_history: List[Dic
     coach_style = "adaptive"
     if onboarding_profile:
         coach_style = onboarding_profile.get('coach_style_preference', 'adaptive')
+        failure_patterns = onboarding_profile.get('failure_patterns', [])
+        if isinstance(failure_patterns, str):
+            failure_patterns = [failure_patterns]
         profile_context = f"""
 User Profile:
 - Primary Change Domain: {onboarding_profile.get('primary_change_domain', 'unknown')}
-- Failure Patterns: {', '.join(onboarding_profile.get('failure_patterns', []))}
+- Failure Patterns: {', '.join(failure_patterns)}
 - Consistency Level: {onboarding_profile.get('baseline_consistency_level', 'unknown')}
 - Primary Obstacle: {onboarding_profile.get('primary_obstacle', 'unknown')}
 - Daily Effort Available: {onboarding_profile.get('max_daily_effort_minutes', 10)} minutes
@@ -264,10 +249,11 @@ async def generate_habit_roadmap(habit_name: str, category: str, duration_days: 
     
     daily_time = onboarding_profile.get('max_daily_effort_minutes', 10) if onboarding_profile else 10
     failure_patterns = onboarding_profile.get('failure_patterns', []) if onboarding_profile else []
+    if isinstance(failure_patterns, str):
+        failure_patterns = [failure_patterns]
     primary_obstacle = onboarding_profile.get('primary_obstacle', 'unknown') if onboarding_profile else 'unknown'
     consistency_level = onboarding_profile.get('baseline_consistency_level', 'somewhat_inconsistent') if onboarding_profile else 'somewhat_inconsistent'
     
-    # Adjust difficulty based on consistency
     difficulty_note = ""
     if consistency_level in ['very_inconsistent', 'somewhat_inconsistent']:
         difficulty_note = "Start VERY simple. The first week should be almost impossibly easy."
@@ -305,16 +291,19 @@ Generate a JSON response with this EXACT structure:
             "day_number": 1,
             "tasks": [
                 {{
+                    "id": "unique-id",
                     "title": "Task title",
                     "description": "Specific actionable instruction",
                     "estimated_minutes": 2,
-                    "resource_links": []
+                    "resource_links": [],
+                    "completed": false
                 }}
             ]
         }}
     ],
     "resources": [
         {{
+            "id": "unique-id",
             "type": "article",
             "title": "Resource title",
             "url": "https://...",
@@ -331,13 +320,14 @@ CRITICAL RULES:
 5. Include specific triggers (when/where to do the habit)
 6. Address the user's failure patterns in the plan design
 7. Include motivational tips and progress markers
+8. Generate unique IDs for each task and resource
 
 Return ONLY the JSON, no markdown formatting:"""
 
     response = model.generate_content(prompt)
     response_text = response.text.strip()
     
-    # Clean up response - remove markdown code blocks if present
+    # Clean up response
     if response_text.startswith('```'):
         response_text = response_text.split('\n', 1)[1]
     if response_text.endswith('```'):
@@ -348,74 +338,50 @@ Return ONLY the JSON, no markdown formatting:"""
     try:
         roadmap_data = json.loads(response_text)
         
-        # Process day_plans to ensure proper structure
-        processed_day_plans = []
-        for day_data in roadmap_data.get('day_plans', []):
-            tasks = []
-            for task_data in day_data.get('tasks', []):
-                task = DailyTask(
-                    title=task_data.get('title', ''),
-                    description=task_data.get('description', ''),
-                    estimated_minutes=task_data.get('estimated_minutes', 5),
-                    resource_links=task_data.get('resource_links', [])
-                )
-                tasks.append(task)
-            
-            day_plan = DayPlan(
-                day_number=day_data.get('day_number', 1),
-                tasks=tasks
-            )
-            processed_day_plans.append(day_plan)
+        # Ensure all tasks have IDs
+        for day_plan in roadmap_data.get('day_plans', []):
+            for task in day_plan.get('tasks', []):
+                if 'id' not in task:
+                    task['id'] = generate_uuid()
+                if 'completed' not in task:
+                    task['completed'] = False
+            if 'completion_percentage' not in day_plan:
+                day_plan['completion_percentage'] = 0.0
         
-        # Process resources
-        processed_resources = []
-        for res_data in roadmap_data.get('resources', []):
-            resource = Resource(
-                type=res_data.get('type', 'article'),
-                title=res_data.get('title', ''),
-                url=res_data.get('url', ''),
-                description=res_data.get('description', '')
-            )
-            processed_resources.append(resource)
+        # Ensure all resources have IDs
+        for resource in roadmap_data.get('resources', []):
+            if 'id' not in resource:
+                resource['id'] = generate_uuid()
         
-        roadmap = HabitRoadmap(
-            overview=roadmap_data.get('overview', ''),
-            total_days=roadmap_data.get('total_days', duration_days),
-            milestones=roadmap_data.get('milestones', []),
-            day_plans=processed_day_plans,
-            resources=processed_resources
-        )
-        
-        return roadmap
+        return roadmap_data
     except json.JSONDecodeError as e:
         logger.error(f"Failed to parse roadmap JSON: {e}")
         logger.error(f"Response text: {response_text}")
         raise HTTPException(status_code=500, detail="Failed to generate roadmap")
 
-def calculate_streak(habit_instance: dict, completed_today: bool) -> tuple:
+def calculate_streak(habit_data: dict, completed_today: bool) -> tuple:
     """Calculate current and longest streak"""
-    current_streak = habit_instance.get('current_streak', 0)
-    longest_streak = habit_instance.get('longest_streak', 0)
-    last_completed = habit_instance.get('last_completed_date')
+    current_streak = habit_data.get('current_streak', 0) or 0
+    longest_streak = habit_data.get('longest_streak', 0) or 0
+    last_completed = habit_data.get('last_completed_date')
     
     today = datetime.utcnow().date()
     
     if completed_today:
         if last_completed:
-            last_date = last_completed.date() if isinstance(last_completed, datetime) else datetime.fromisoformat(str(last_completed)).date()
+            if isinstance(last_completed, str):
+                last_date = datetime.fromisoformat(last_completed.replace('Z', '+00:00')).date()
+            else:
+                last_date = last_completed.date()
             days_diff = (today - last_date).days
             
             if days_diff == 0:
-                # Already completed today, no change
                 pass
             elif days_diff == 1:
-                # Consecutive day
                 current_streak += 1
             else:
-                # Streak broken, start new
                 current_streak = 1
         else:
-            # First completion
             current_streak = 1
         
         longest_streak = max(longest_streak, current_streak)
@@ -426,106 +392,163 @@ def calculate_streak(habit_instance: dict, completed_today: bool) -> tuple:
 
 @api_router.get("/")
 async def root():
-    return {"message": "HabitGPT API is running", "version": "1.0.0"}
+    return {"message": "HabitGPT API is running", "version": "1.0.0", "database": "Supabase"}
 
 @api_router.get("/health")
 async def health_check():
-    return {"status": "healthy", "timestamp": datetime.utcnow().isoformat()}
+    db_status = "connected" if supabase else "not configured"
+    return {"status": "healthy", "timestamp": datetime.utcnow().isoformat(), "database": db_status}
 
-# User Routes
-@api_router.post("/users", response_model=User)
+# ==================== USER ROUTES ====================
+
+@api_router.post("/users", response_model=UserResponse)
 async def create_user(user_data: UserCreate):
     """Create a new user or return existing user by email"""
-    existing_user = await db.users.find_one({"email": user_data.email})
-    if existing_user:
-        return User(**existing_user)
+    if not supabase:
+        raise HTTPException(status_code=500, detail="Database not configured")
     
-    user = User(**user_data.dict())
-    await db.users.insert_one(user.dict())
-    return user
+    # Check if user exists
+    result = supabase.table('users').select('*').eq('email', user_data.email).execute()
+    
+    if result.data and len(result.data) > 0:
+        return UserResponse(**result.data[0])
+    
+    # Create new user
+    new_user = {
+        'id': generate_uuid(),
+        'email': user_data.email,
+        'name': user_data.name,
+        'google_id': user_data.google_id,
+        'avatar_url': user_data.avatar_url,
+        'onboarding_completed': False,
+        'trial_started': False,
+        'subscription_active': False,
+    }
+    
+    result = supabase.table('users').insert(new_user).execute()
+    return UserResponse(**result.data[0])
 
-@api_router.get("/users/{user_id}", response_model=User)
+@api_router.get("/users/{user_id}", response_model=UserResponse)
 async def get_user(user_id: str):
     """Get user by ID"""
-    user = await db.users.find_one({"id": user_id})
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-    return User(**user)
-
-@api_router.get("/users/email/{email}", response_model=User)
-async def get_user_by_email(email: str):
-    """Get user by email"""
-    user = await db.users.find_one({"email": email})
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-    return User(**user)
-
-@api_router.put("/users/{user_id}", response_model=User)
-async def update_user(user_id: str, updates: dict):
-    """Update user fields"""
-    result = await db.users.update_one(
-        {"id": user_id},
-        {"$set": updates}
-    )
-    if result.modified_count == 0:
+    if not supabase:
+        raise HTTPException(status_code=500, detail="Database not configured")
+    
+    result = supabase.table('users').select('*').eq('id', user_id).execute()
+    
+    if not result.data or len(result.data) == 0:
         raise HTTPException(status_code=404, detail="User not found")
     
-    user = await db.users.find_one({"id": user_id})
-    return User(**user)
+    return UserResponse(**result.data[0])
 
-# Onboarding Routes
-@api_router.post("/onboarding", response_model=OnboardingProfile)
+@api_router.get("/users/email/{email}", response_model=UserResponse)
+async def get_user_by_email(email: str):
+    """Get user by email"""
+    if not supabase:
+        raise HTTPException(status_code=500, detail="Database not configured")
+    
+    result = supabase.table('users').select('*').eq('email', email).execute()
+    
+    if not result.data or len(result.data) == 0:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    return UserResponse(**result.data[0])
+
+@api_router.put("/users/{user_id}", response_model=UserResponse)
+async def update_user(user_id: str, updates: dict):
+    """Update user fields"""
+    if not supabase:
+        raise HTTPException(status_code=500, detail="Database not configured")
+    
+    updates['updated_at'] = datetime.utcnow().isoformat()
+    result = supabase.table('users').update(updates).eq('id', user_id).execute()
+    
+    if not result.data or len(result.data) == 0:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    return UserResponse(**result.data[0])
+
+# ==================== ONBOARDING ROUTES ====================
+
+@api_router.post("/onboarding", response_model=OnboardingProfileResponse)
 async def create_onboarding_profile(profile_data: OnboardingProfileCreate):
     """Create onboarding profile"""
-    profile = OnboardingProfile(**profile_data.dict())
-    await db.onboarding_profiles.insert_one(profile.dict())
-    return profile
+    if not supabase:
+        raise HTTPException(status_code=500, detail="Database not configured")
+    
+    new_profile = {
+        'id': generate_uuid(),
+        'primary_change_domain': profile_data.primary_change_domain,
+        'failure_patterns': profile_data.failure_patterns,
+        'baseline_consistency_level': profile_data.baseline_consistency_level,
+        'primary_obstacle': profile_data.primary_obstacle,
+        'max_daily_effort_minutes': profile_data.max_daily_effort_minutes,
+        'miss_response_type': profile_data.miss_response_type,
+        'coach_style_preference': profile_data.coach_style_preference,
+    }
+    
+    result = supabase.table('onboarding_profiles').insert(new_profile).execute()
+    return OnboardingProfileResponse(**result.data[0])
 
-@api_router.get("/onboarding/{profile_id}", response_model=OnboardingProfile)
+@api_router.get("/onboarding/{profile_id}", response_model=OnboardingProfileResponse)
 async def get_onboarding_profile(profile_id: str):
     """Get onboarding profile by ID"""
-    profile = await db.onboarding_profiles.find_one({"id": profile_id})
-    if not profile:
+    if not supabase:
+        raise HTTPException(status_code=500, detail="Database not configured")
+    
+    result = supabase.table('onboarding_profiles').select('*').eq('id', profile_id).execute()
+    
+    if not result.data or len(result.data) == 0:
         raise HTTPException(status_code=404, detail="Profile not found")
-    return OnboardingProfile(**profile)
+    
+    return OnboardingProfileResponse(**result.data[0])
 
-@api_router.get("/onboarding/user/{user_id}", response_model=OnboardingProfile)
+@api_router.get("/onboarding/user/{user_id}", response_model=OnboardingProfileResponse)
 async def get_onboarding_profile_by_user(user_id: str):
     """Get onboarding profile by user ID"""
-    profile = await db.onboarding_profiles.find_one({"user_id": user_id})
-    if not profile:
+    if not supabase:
+        raise HTTPException(status_code=500, detail="Database not configured")
+    
+    result = supabase.table('onboarding_profiles').select('*').eq('user_id', user_id).execute()
+    
+    if not result.data or len(result.data) == 0:
         raise HTTPException(status_code=404, detail="Profile not found")
-    return OnboardingProfile(**profile)
+    
+    return OnboardingProfileResponse(**result.data[0])
 
 @api_router.put("/onboarding/{profile_id}/link-user")
 async def link_onboarding_to_user(profile_id: str, user_id: str):
     """Link onboarding profile to a user after authentication"""
+    if not supabase:
+        raise HTTPException(status_code=500, detail="Database not configured")
+    
     # Update onboarding profile with user_id
-    await db.onboarding_profiles.update_one(
-        {"id": profile_id},
-        {"$set": {"user_id": user_id}}
-    )
+    supabase.table('onboarding_profiles').update({'user_id': user_id}).eq('id', profile_id).execute()
     
     # Update user with onboarding profile
-    await db.users.update_one(
-        {"id": user_id},
-        {"$set": {"onboarding_completed": True, "onboarding_profile_id": profile_id}}
-    )
+    supabase.table('users').update({
+        'onboarding_completed': True,
+        'onboarding_profile_id': profile_id,
+        'updated_at': datetime.utcnow().isoformat()
+    }).eq('id', user_id).execute()
     
     return {"status": "success", "message": "Profile linked to user"}
 
-# Habit Chat Routes
+# ==================== HABIT CHAT ROUTES ====================
+
 @api_router.post("/habits/chat")
 async def habit_chat(request: ChatRequest):
     """Chat with AI for habit selection and clarification"""
-    # Get user's onboarding profile if available
     onboarding_profile = None
-    if request.user_id:
-        user = await db.users.find_one({"id": request.user_id})
-        if user and user.get("onboarding_profile_id"):
-            profile = await db.onboarding_profiles.find_one({"id": user["onboarding_profile_id"]})
-            if profile:
-                onboarding_profile = profile
+    
+    if request.user_id and supabase:
+        # Get user's onboarding profile
+        user_result = supabase.table('users').select('onboarding_profile_id').eq('id', request.user_id).execute()
+        
+        if user_result.data and len(user_result.data) > 0 and user_result.data[0].get('onboarding_profile_id'):
+            profile_result = supabase.table('onboarding_profiles').select('*').eq('id', user_result.data[0]['onboarding_profile_id']).execute()
+            if profile_result.data and len(profile_result.data) > 0:
+                onboarding_profile = profile_result.data[0]
     
     # Convert chat history to proper format
     chat_history = [{"role": msg.role, "content": msg.content} for msg in request.chat_history]
@@ -539,13 +562,11 @@ async def habit_chat(request: ChatRequest):
     category = None
     
     if ready_for_roadmap:
-        # Extract habit name and category
         try:
             marker = response.split("[READY_FOR_ROADMAP:")[1].split("]")[0]
             parts = marker.split(":")
             habit_name = parts[0].strip()
             category = parts[1].strip() if len(parts) > 1 else "other"
-            # Remove the marker from response
             response = response.split("[READY_FOR_ROADMAP")[0].strip()
         except:
             ready_for_roadmap = False
@@ -557,17 +578,22 @@ async def habit_chat(request: ChatRequest):
         "category": category
     }
 
-# Habit Instance Routes
-@api_router.post("/habits/instances", response_model=HabitInstance)
+# ==================== HABIT INSTANCE ROUTES ====================
+
+@api_router.post("/habits/instances")
 async def create_habit_instance(habit_data: HabitInstanceCreate):
     """Create a new habit instance and generate roadmap"""
+    if not supabase:
+        raise HTTPException(status_code=500, detail="Database not configured")
+    
     # Get user's onboarding profile
     onboarding_profile = None
-    user = await db.users.find_one({"id": habit_data.user_id})
-    if user and user.get("onboarding_profile_id"):
-        profile = await db.onboarding_profiles.find_one({"id": user["onboarding_profile_id"]})
-        if profile:
-            onboarding_profile = profile
+    user_result = supabase.table('users').select('onboarding_profile_id').eq('id', habit_data.user_id).execute()
+    
+    if user_result.data and len(user_result.data) > 0 and user_result.data[0].get('onboarding_profile_id'):
+        profile_result = supabase.table('onboarding_profiles').select('*').eq('id', user_result.data[0]['onboarding_profile_id']).execute()
+        if profile_result.data and len(profile_result.data) > 0:
+            onboarding_profile = profile_result.data[0]
     
     # Generate roadmap
     roadmap = await generate_habit_roadmap(
@@ -578,92 +604,124 @@ async def create_habit_instance(habit_data: HabitInstanceCreate):
     )
     
     # Create habit instance
-    habit_instance = HabitInstance(
-        user_id=habit_data.user_id,
-        habit_name=habit_data.habit_name,
-        habit_description=habit_data.habit_description,
-        category=habit_data.category,
-        duration_days=habit_data.duration_days,
-        end_date=datetime.utcnow() + timedelta(days=habit_data.duration_days),
-        roadmap=roadmap
-    )
+    start_date = datetime.utcnow()
+    habit_instance = {
+        'id': generate_uuid(),
+        'user_id': habit_data.user_id,
+        'habit_name': habit_data.habit_name,
+        'habit_description': habit_data.habit_description,
+        'category': habit_data.category,
+        'duration_days': habit_data.duration_days,
+        'start_date': start_date.isoformat(),
+        'end_date': (start_date + timedelta(days=habit_data.duration_days)).isoformat(),
+        'status': 'active',
+        'completion_percentage': 0.0,
+        'current_streak': 0,
+        'longest_streak': 0,
+        'roadmap': roadmap,
+        'chat_history': [],
+    }
     
-    await db.habit_instances.insert_one(habit_instance.dict())
-    return habit_instance
+    result = supabase.table('habit_instances').insert(habit_instance).execute()
+    return result.data[0]
 
 @api_router.get("/habits/instances/user/{user_id}")
 async def get_user_habit_instances(user_id: str):
     """Get all habit instances for a user"""
-    instances = await db.habit_instances.find({"user_id": user_id}).to_list(100)
-    return [HabitInstance(**instance) for instance in instances]
+    if not supabase:
+        raise HTTPException(status_code=500, detail="Database not configured")
+    
+    result = supabase.table('habit_instances').select('*').eq('user_id', user_id).order('created_at', desc=True).execute()
+    return result.data
 
 @api_router.get("/habits/instances/{instance_id}")
 async def get_habit_instance(instance_id: str):
     """Get a specific habit instance"""
-    instance = await db.habit_instances.find_one({"id": instance_id})
-    if not instance:
+    if not supabase:
+        raise HTTPException(status_code=500, detail="Database not configured")
+    
+    result = supabase.table('habit_instances').select('*').eq('id', instance_id).execute()
+    
+    if not result.data or len(result.data) == 0:
         raise HTTPException(status_code=404, detail="Habit instance not found")
-    return HabitInstance(**instance)
+    
+    return result.data[0]
 
 @api_router.delete("/habits/instances/{instance_id}")
 async def delete_habit_instance(instance_id: str):
     """Delete a habit instance"""
-    result = await db.habit_instances.delete_one({"id": instance_id})
-    if result.deleted_count == 0:
-        raise HTTPException(status_code=404, detail="Habit instance not found")
+    if not supabase:
+        raise HTTPException(status_code=500, detail="Database not configured")
+    
+    supabase.table('habit_instances').delete().eq('id', instance_id).execute()
     return {"status": "success", "message": "Habit instance deleted"}
 
-# Task Routes
+# ==================== TASK ROUTES ====================
+
 @api_router.put("/habits/instances/{instance_id}/tasks/complete")
 async def complete_task(instance_id: str, request: TaskCompletionRequest):
     """Mark a task as completed and update streaks"""
-    instance = await db.habit_instances.find_one({"id": instance_id})
-    if not instance:
+    if not supabase:
+        raise HTTPException(status_code=500, detail="Database not configured")
+    
+    result = supabase.table('habit_instances').select('*').eq('id', instance_id).execute()
+    
+    if not result.data or len(result.data) == 0:
         raise HTTPException(status_code=404, detail="Habit instance not found")
     
-    habit_instance = HabitInstance(**instance)
+    habit_data = result.data[0]
+    roadmap = habit_data.get('roadmap', {})
     
     # Find and update the task
     day_completed = False
-    if habit_instance.roadmap:
-        for day_plan in habit_instance.roadmap.day_plans:
-            if day_plan.day_number == request.day_number:
-                for task in day_plan.tasks:
-                    if task.id == request.task_id:
-                        task.completed = True
-                        task.completed_at = datetime.utcnow()
+    if roadmap:
+        day_plans = roadmap.get('day_plans', [])
+        for day_plan in day_plans:
+            if day_plan.get('day_number') == request.day_number:
+                for task in day_plan.get('tasks', []):
+                    if task.get('id') == request.task_id:
+                        task['completed'] = True
+                        task['completed_at'] = datetime.utcnow().isoformat()
                         break
                 
-                # Calculate day completion percentage
-                completed_tasks = sum(1 for t in day_plan.tasks if t.completed)
-                day_plan.completion_percentage = (completed_tasks / len(day_plan.tasks)) * 100 if day_plan.tasks else 0
-                day_completed = day_plan.completion_percentage >= 100
+                # Calculate day completion
+                tasks = day_plan.get('tasks', [])
+                completed_tasks = sum(1 for t in tasks if t.get('completed'))
+                day_plan['completion_percentage'] = (completed_tasks / len(tasks)) * 100 if tasks else 0
+                day_completed = day_plan['completion_percentage'] >= 100
                 break
         
-        # Calculate overall completion percentage
-        total_tasks = sum(len(dp.tasks) for dp in habit_instance.roadmap.day_plans)
-        completed_total = sum(sum(1 for t in dp.tasks if t.completed) for dp in habit_instance.roadmap.day_plans)
-        habit_instance.completion_percentage = (completed_total / total_tasks) * 100 if total_tasks > 0 else 0
+        # Calculate overall completion
+        total_tasks = sum(len(dp.get('tasks', [])) for dp in day_plans)
+        completed_total = sum(sum(1 for t in dp.get('tasks', []) if t.get('completed')) for dp in day_plans)
+        completion_percentage = (completed_total / total_tasks) * 100 if total_tasks > 0 else 0
+    else:
+        completion_percentage = habit_data.get('completion_percentage', 0)
     
     # Update streak if day is fully completed
-    current_streak = habit_instance.current_streak
-    longest_streak = habit_instance.longest_streak
+    current_streak = habit_data.get('current_streak', 0) or 0
+    longest_streak = habit_data.get('longest_streak', 0) or 0
+    last_completed_date = habit_data.get('last_completed_date')
     
     if day_completed:
-        current_streak, longest_streak = calculate_streak(instance, True)
-        habit_instance.current_streak = current_streak
-        habit_instance.longest_streak = longest_streak
-        habit_instance.last_completed_date = datetime.utcnow()
+        current_streak, longest_streak = calculate_streak(habit_data, True)
+        last_completed_date = datetime.utcnow().isoformat()
     
     # Update in database
-    await db.habit_instances.update_one(
-        {"id": instance_id},
-        {"$set": habit_instance.dict()}
-    )
+    update_data = {
+        'roadmap': roadmap,
+        'completion_percentage': completion_percentage,
+        'current_streak': current_streak,
+        'longest_streak': longest_streak,
+        'last_completed_date': last_completed_date,
+        'updated_at': datetime.utcnow().isoformat()
+    }
+    
+    supabase.table('habit_instances').update(update_data).eq('id', instance_id).execute()
     
     return {
-        "status": "success", 
-        "completion_percentage": habit_instance.completion_percentage,
+        "status": "success",
+        "completion_percentage": completion_percentage,
         "current_streak": current_streak,
         "longest_streak": longest_streak
     }
@@ -671,146 +729,152 @@ async def complete_task(instance_id: str, request: TaskCompletionRequest):
 @api_router.get("/habits/instances/{instance_id}/daily-tasks/{day_number}")
 async def get_daily_tasks(instance_id: str, day_number: int):
     """Get tasks for a specific day"""
-    instance = await db.habit_instances.find_one({"id": instance_id})
-    if not instance:
+    if not supabase:
+        raise HTTPException(status_code=500, detail="Database not configured")
+    
+    result = supabase.table('habit_instances').select('roadmap').eq('id', instance_id).execute()
+    
+    if not result.data or len(result.data) == 0:
         raise HTTPException(status_code=404, detail="Habit instance not found")
     
-    habit_instance = HabitInstance(**instance)
+    roadmap = result.data[0].get('roadmap', {})
     
-    if habit_instance.roadmap:
-        for day_plan in habit_instance.roadmap.day_plans:
-            if day_plan.day_number == day_number:
+    if roadmap:
+        for day_plan in roadmap.get('day_plans', []):
+            if day_plan.get('day_number') == day_number:
                 return day_plan
     
     raise HTTPException(status_code=404, detail="Day plan not found")
-
-# ==================== NOTIFICATION MODELS ====================
-
-class NotificationPreferences(BaseModel):
-    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    user_id: str
-    push_token: Optional[str] = None
-    platform: Optional[str] = None  # ios, android
-    daily_reminders: bool = True
-    morning_time: str = "09:00"
-    afternoon_time: str = "14:00"
-    evening_time: str = "20:00"
-    milestone_alerts: bool = True
-    streak_notifications: bool = True
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
-
-class RegisterPushTokenRequest(BaseModel):
-    user_id: str
-    push_token: str
-    platform: str  # ios, android
-
-class UpdateNotificationPrefsRequest(BaseModel):
-    daily_reminders: Optional[bool] = None
-    morning_time: Optional[str] = None
-    afternoon_time: Optional[str] = None
-    evening_time: Optional[str] = None
-    milestone_alerts: Optional[bool] = None
-    streak_notifications: Optional[bool] = None
 
 # ==================== NOTIFICATION ROUTES ====================
 
 @api_router.post("/notifications/register")
 async def register_push_token(request: RegisterPushTokenRequest):
     """Register a push token for a user"""
-    # Check if preferences already exist for this user
-    existing = await db.notification_preferences.find_one({"user_id": request.user_id})
+    if not supabase:
+        raise HTTPException(status_code=500, detail="Database not configured")
     
-    if existing:
-        # Update existing preferences with new token
-        await db.notification_preferences.update_one(
-            {"user_id": request.user_id},
-            {"$set": {
-                "push_token": request.push_token,
-                "platform": request.platform,
-                "updated_at": datetime.utcnow()
-            }}
-        )
+    # Check if preferences exist
+    result = supabase.table('notification_preferences').select('id').eq('user_id', request.user_id).execute()
+    
+    if result.data and len(result.data) > 0:
+        # Update existing
+        supabase.table('notification_preferences').update({
+            'push_token': request.push_token,
+            'platform': request.platform,
+            'updated_at': datetime.utcnow().isoformat()
+        }).eq('user_id', request.user_id).execute()
         return {"status": "success", "message": "Push token updated"}
     else:
-        # Create new preferences
-        prefs = NotificationPreferences(
-            user_id=request.user_id,
-            push_token=request.push_token,
-            platform=request.platform
-        )
-        await db.notification_preferences.insert_one(prefs.dict())
+        # Create new
+        new_prefs = {
+            'id': generate_uuid(),
+            'user_id': request.user_id,
+            'push_token': request.push_token,
+            'platform': request.platform,
+            'daily_reminders': True,
+            'morning_time': '09:00',
+            'afternoon_time': '14:00',
+            'evening_time': '20:00',
+            'milestone_alerts': True,
+            'streak_notifications': True,
+        }
+        supabase.table('notification_preferences').insert(new_prefs).execute()
         return {"status": "success", "message": "Push token registered"}
 
 @api_router.get("/notifications/preferences/{user_id}")
 async def get_notification_preferences(user_id: str):
     """Get notification preferences for a user"""
-    prefs = await db.notification_preferences.find_one({"user_id": user_id})
-    if not prefs:
+    if not supabase:
+        raise HTTPException(status_code=500, detail="Database not configured")
+    
+    result = supabase.table('notification_preferences').select('*').eq('user_id', user_id).execute()
+    
+    if not result.data or len(result.data) == 0:
         # Return default preferences
-        return NotificationPreferences(user_id=user_id)
-    return NotificationPreferences(**prefs)
+        return {
+            'user_id': user_id,
+            'daily_reminders': True,
+            'morning_time': '09:00',
+            'afternoon_time': '14:00',
+            'evening_time': '20:00',
+            'milestone_alerts': True,
+            'streak_notifications': True,
+        }
+    
+    return result.data[0]
 
 @api_router.put("/notifications/preferences/{user_id}")
 async def update_notification_preferences(user_id: str, request: UpdateNotificationPrefsRequest):
     """Update notification preferences for a user"""
+    if not supabase:
+        raise HTTPException(status_code=500, detail="Database not configured")
+    
     updates = {k: v for k, v in request.dict().items() if v is not None}
-    updates["updated_at"] = datetime.utcnow()
+    updates['updated_at'] = datetime.utcnow().isoformat()
     
-    existing = await db.notification_preferences.find_one({"user_id": user_id})
+    result = supabase.table('notification_preferences').select('id').eq('user_id', user_id).execute()
     
-    if existing:
-        await db.notification_preferences.update_one(
-            {"user_id": user_id},
-            {"$set": updates}
-        )
+    if result.data and len(result.data) > 0:
+        supabase.table('notification_preferences').update(updates).eq('user_id', user_id).execute()
     else:
-        # Create new preferences with updates
-        prefs = NotificationPreferences(user_id=user_id, **request.dict())
-        await db.notification_preferences.insert_one(prefs.dict())
+        new_prefs = {
+            'id': generate_uuid(),
+            'user_id': user_id,
+            **updates
+        }
+        supabase.table('notification_preferences').insert(new_prefs).execute()
     
     return {"status": "success", "message": "Notification preferences updated"}
 
-@api_router.get("/notifications/users-to-notify")
-async def get_users_to_notify():
-    """Get all users with push tokens enabled for notifications (for server-side push)"""
-    users = await db.notification_preferences.find({
-        "daily_reminders": True,
-        "push_token": {"$ne": None}
-    }).to_list(1000)
+@api_router.get("/notifications/coach-messages/{user_id}")
+async def get_coach_messages(user_id: str):
+    """Get coach-style specific notification messages for a user"""
+    if not supabase:
+        raise HTTPException(status_code=500, detail="Database not configured")
     
-    return [{"user_id": u["user_id"], "push_token": u["push_token"], "platform": u.get("platform")} for u in users]
+    coach_style = "adaptive"
+    
+    # Get user's onboarding profile
+    user_result = supabase.table('users').select('onboarding_profile_id').eq('id', user_id).execute()
+    
+    if user_result.data and len(user_result.data) > 0 and user_result.data[0].get('onboarding_profile_id'):
+        profile_result = supabase.table('onboarding_profiles').select('coach_style_preference').eq('id', user_result.data[0]['onboarding_profile_id']).execute()
+        if profile_result.data and len(profile_result.data) > 0:
+            coach_style = profile_result.data[0].get('coach_style_preference', 'adaptive')
+    
+    return {
+        "coach_style": coach_style,
+        "messages": COACH_STYLES.get(coach_style, COACH_STYLES['adaptive'])
+    }
 
 @api_router.get("/notifications/pending-tasks/{user_id}")
 async def get_pending_tasks_count(user_id: str):
     """Get count of pending tasks for today for a user"""
-    # Get all active habit instances for user
-    instances = await db.habit_instances.find({
-        "user_id": user_id,
-        "status": "active"
-    }).to_list(100)
+    if not supabase:
+        raise HTTPException(status_code=500, detail="Database not configured")
+    
+    result = supabase.table('habit_instances').select('*').eq('user_id', user_id).eq('status', 'active').execute()
     
     total_pending = 0
     habit_summaries = []
     
-    for instance in instances:
-        habit_instance = HabitInstance(**instance)
-        if habit_instance.roadmap:
-            # Calculate current day
-            start_date = habit_instance.start_date
+    for habit_data in result.data:
+        roadmap = habit_data.get('roadmap', {})
+        if roadmap:
+            start_date = datetime.fromisoformat(habit_data['start_date'].replace('Z', '+00:00'))
             today = datetime.utcnow()
             current_day = max(1, (today - start_date).days + 1)
             
-            # Find today's day plan
-            for day_plan in habit_instance.roadmap.day_plans:
-                if day_plan.day_number == current_day:
-                    incomplete_tasks = sum(1 for t in day_plan.tasks if not t.completed)
+            for day_plan in roadmap.get('day_plans', []):
+                if day_plan.get('day_number') == current_day:
+                    incomplete_tasks = sum(1 for t in day_plan.get('tasks', []) if not t.get('completed'))
                     total_pending += incomplete_tasks
                     if incomplete_tasks > 0:
                         habit_summaries.append({
-                            "habit_name": habit_instance.habit_name,
+                            "habit_name": habit_data['habit_name'],
                             "pending_tasks": incomplete_tasks,
-                            "current_streak": habit_instance.current_streak
+                            "current_streak": habit_data.get('current_streak', 0)
                         })
                     break
     
@@ -819,92 +883,68 @@ async def get_pending_tasks_count(user_id: str):
         "habits": habit_summaries
     }
 
-@api_router.get("/notifications/coach-messages/{user_id}")
-async def get_coach_messages(user_id: str):
-    """Get coach-style specific notification messages for a user"""
-    # Get user's onboarding profile
-    user = await db.users.find_one({"id": user_id})
-    coach_style = "adaptive"  # default
-    
-    if user and user.get("onboarding_profile_id"):
-        profile = await db.onboarding_profiles.find_one({"id": user["onboarding_profile_id"]})
-        if profile:
-            coach_style = profile.get("coach_style_preference", "adaptive")
-    
-    return {
-        "coach_style": coach_style,
-        "messages": COACH_STYLES.get(coach_style, COACH_STYLES['adaptive'])
-    }
+# ==================== TRIAL & SUBSCRIPTION ROUTES ====================
 
-# Trial/Payment Routes
 @api_router.post("/users/{user_id}/start-trial")
 async def start_trial(user_id: str):
     """Start the free trial for a user"""
-    user = await db.users.find_one({"id": user_id})
-    if not user:
+    if not supabase:
+        raise HTTPException(status_code=500, detail="Database not configured")
+    
+    result = supabase.table('users').select('trial_started').eq('id', user_id).execute()
+    
+    if not result.data or len(result.data) == 0:
         raise HTTPException(status_code=404, detail="User not found")
     
-    if user.get("trial_started"):
+    if result.data[0].get('trial_started'):
         raise HTTPException(status_code=400, detail="Trial already started")
     
-    await db.users.update_one(
-        {"id": user_id},
-        {"$set": {
-            "trial_started": True,
-            "trial_start_date": datetime.utcnow()
-        }}
-    )
+    trial_start = datetime.utcnow()
+    supabase.table('users').update({
+        'trial_started': True,
+        'trial_start_date': trial_start.isoformat(),
+        'updated_at': trial_start.isoformat()
+    }).eq('id', user_id).execute()
     
-    return {"status": "success", "message": "Trial started", "trial_end_date": (datetime.utcnow() + timedelta(days=29)).isoformat()}
-
-# ==================== SUBSCRIPTION ROUTES ====================
-
-class SubscriptionStatus(BaseModel):
-    is_subscribed: bool
-    is_trial_active: bool = False
-    trial_end_date: Optional[datetime] = None
-    subscription_end_date: Optional[datetime] = None
-    product_id: Optional[str] = None
-    will_renew: bool = False
-
-class UpdateSubscriptionRequest(BaseModel):
-    is_subscribed: bool
-    is_trial_active: Optional[bool] = None
-    trial_end_date: Optional[str] = None
-    expiration_date: Optional[str] = None
-    product_id: Optional[str] = None
-    will_renew: Optional[bool] = None
+    return {
+        "status": "success",
+        "message": "Trial started",
+        "trial_end_date": (trial_start + timedelta(days=29)).isoformat()
+    }
 
 @api_router.get("/users/{user_id}/subscription")
 async def get_subscription_status(user_id: str):
     """Get subscription status for a user"""
-    # Check subscriptions collection
-    subscription = await db.subscriptions.find_one({"user_id": user_id})
+    if not supabase:
+        raise HTTPException(status_code=500, detail="Database not configured")
     
-    if subscription:
-        # Check if subscription is still valid
+    # Check subscriptions table
+    result = supabase.table('subscriptions').select('*').eq('user_id', user_id).execute()
+    
+    if result.data and len(result.data) > 0:
+        sub = result.data[0]
         is_valid = True
-        if subscription.get("subscription_end_date"):
-            end_date = subscription["subscription_end_date"]
-            if isinstance(end_date, str):
-                end_date = datetime.fromisoformat(end_date.replace('Z', '+00:00'))
+        if sub.get('subscription_end_date'):
+            end_date = datetime.fromisoformat(sub['subscription_end_date'].replace('Z', '+00:00'))
             is_valid = end_date > datetime.utcnow()
         
         return {
-            "is_subscribed": is_valid and subscription.get("is_subscribed", False),
-            "is_trial_active": subscription.get("is_trial_active", False),
-            "trial_end_date": subscription.get("trial_end_date"),
-            "subscription_end_date": subscription.get("subscription_end_date"),
-            "product_id": subscription.get("product_id"),
-            "will_renew": subscription.get("will_renew", False)
+            "is_subscribed": is_valid and sub.get('is_subscribed', False),
+            "is_trial_active": sub.get('is_trial_active', False),
+            "trial_end_date": sub.get('trial_end_date'),
+            "subscription_end_date": sub.get('subscription_end_date'),
+            "product_id": sub.get('product_id'),
+            "will_renew": sub.get('will_renew', False)
         }
     
-    # Check if user has active trial from users collection
-    user = await db.users.find_one({"id": user_id})
-    if user and user.get("trial_started"):
-        trial_start = user.get("trial_start_date")
+    # Check user's trial status
+    user_result = supabase.table('users').select('trial_started, trial_start_date').eq('id', user_id).execute()
+    
+    if user_result.data and len(user_result.data) > 0 and user_result.data[0].get('trial_started'):
+        trial_start = user_result.data[0].get('trial_start_date')
         if trial_start:
-            trial_end = trial_start + timedelta(days=30)  # First month free
+            trial_start_dt = datetime.fromisoformat(trial_start.replace('Z', '+00:00'))
+            trial_end = trial_start_dt + timedelta(days=30)
             is_trial_active = datetime.utcnow() < trial_end
             return {
                 "is_subscribed": is_trial_active,
@@ -926,44 +966,48 @@ async def get_subscription_status(user_id: str):
 
 @api_router.put("/users/{user_id}/subscription")
 async def update_subscription_status(user_id: str, request: UpdateSubscriptionRequest):
-    """Update subscription status for a user (called after RevenueCat events)"""
+    """Update subscription status for a user"""
+    if not supabase:
+        raise HTTPException(status_code=500, detail="Database not configured")
+    
     subscription_data = {
-        "user_id": user_id,
-        "is_subscribed": request.is_subscribed,
-        "is_trial_active": request.is_trial_active or False,
-        "will_renew": request.will_renew or False,
-        "updated_at": datetime.utcnow()
+        'user_id': user_id,
+        'is_subscribed': request.is_subscribed,
+        'is_trial_active': request.is_trial_active or False,
+        'will_renew': request.will_renew or False,
+        'updated_at': datetime.utcnow().isoformat()
     }
     
     if request.trial_end_date:
-        subscription_data["trial_end_date"] = request.trial_end_date
+        subscription_data['trial_end_date'] = request.trial_end_date
     if request.expiration_date:
-        subscription_data["subscription_end_date"] = request.expiration_date
+        subscription_data['subscription_end_date'] = request.expiration_date
     if request.product_id:
-        subscription_data["product_id"] = request.product_id
+        subscription_data['product_id'] = request.product_id
     
     # Upsert subscription
-    existing = await db.subscriptions.find_one({"user_id": user_id})
-    if existing:
-        await db.subscriptions.update_one(
-            {"user_id": user_id},
-            {"$set": subscription_data}
-        )
-    else:
-        subscription_data["created_at"] = datetime.utcnow()
-        await db.subscriptions.insert_one(subscription_data)
+    result = supabase.table('subscriptions').select('id').eq('user_id', user_id).execute()
     
-    # Also update user's subscription_active flag
-    await db.users.update_one(
-        {"id": user_id},
-        {"$set": {"subscription_active": request.is_subscribed}}
-    )
+    if result.data and len(result.data) > 0:
+        supabase.table('subscriptions').update(subscription_data).eq('user_id', user_id).execute()
+    else:
+        subscription_data['id'] = generate_uuid()
+        supabase.table('subscriptions').insert(subscription_data).execute()
+    
+    # Update user's subscription_active flag
+    supabase.table('users').update({
+        'subscription_active': request.is_subscribed,
+        'updated_at': datetime.utcnow().isoformat()
+    }).eq('id', user_id).execute()
     
     return {"status": "success", "message": "Subscription status updated"}
 
 @api_router.post("/webhooks/revenuecat")
 async def revenuecat_webhook(payload: dict):
     """Handle RevenueCat webhook events for subscription updates"""
+    if not supabase:
+        raise HTTPException(status_code=500, detail="Database not configured")
+    
     event_type = payload.get("event", {}).get("type")
     app_user_id = payload.get("event", {}).get("app_user_id")
     
@@ -972,44 +1016,39 @@ async def revenuecat_webhook(payload: dict):
     
     logger.info(f"RevenueCat webhook: {event_type} for user {app_user_id}")
     
-    # Handle different event types
     if event_type in ["INITIAL_PURCHASE", "RENEWAL", "PRODUCT_CHANGE"]:
-        # Subscription activated or renewed
         expiration_date = payload.get("event", {}).get("expiration_at_ms")
         product_id = payload.get("event", {}).get("product_id")
         
         subscription_data = {
-            "user_id": app_user_id,
-            "is_subscribed": True,
-            "is_trial_active": event_type == "INITIAL_PURCHASE",
-            "will_renew": True,
-            "product_id": product_id,
-            "updated_at": datetime.utcnow()
+            'user_id': app_user_id,
+            'is_subscribed': True,
+            'is_trial_active': event_type == "INITIAL_PURCHASE",
+            'will_renew': True,
+            'product_id': product_id,
+            'updated_at': datetime.utcnow().isoformat()
         }
         
         if expiration_date:
-            subscription_data["subscription_end_date"] = datetime.fromtimestamp(expiration_date / 1000)
+            subscription_data['subscription_end_date'] = datetime.fromtimestamp(expiration_date / 1000).isoformat()
         
-        existing = await db.subscriptions.find_one({"user_id": app_user_id})
-        if existing:
-            await db.subscriptions.update_one({"user_id": app_user_id}, {"$set": subscription_data})
+        result = supabase.table('subscriptions').select('id').eq('user_id', app_user_id).execute()
+        if result.data and len(result.data) > 0:
+            supabase.table('subscriptions').update(subscription_data).eq('user_id', app_user_id).execute()
         else:
-            subscription_data["created_at"] = datetime.utcnow()
-            await db.subscriptions.insert_one(subscription_data)
+            subscription_data['id'] = generate_uuid()
+            supabase.table('subscriptions').insert(subscription_data).execute()
         
-        await db.users.update_one({"id": app_user_id}, {"$set": {"subscription_active": True}})
+        supabase.table('users').update({'subscription_active': True}).eq('id', app_user_id).execute()
         
     elif event_type in ["CANCELLATION", "EXPIRATION", "BILLING_ISSUE"]:
-        # Subscription cancelled or expired
-        await db.subscriptions.update_one(
-            {"user_id": app_user_id},
-            {"$set": {
-                "is_subscribed": False,
-                "will_renew": False,
-                "updated_at": datetime.utcnow()
-            }}
-        )
-        await db.users.update_one({"id": app_user_id}, {"$set": {"subscription_active": False}})
+        supabase.table('subscriptions').update({
+            'is_subscribed': False,
+            'will_renew': False,
+            'updated_at': datetime.utcnow().isoformat()
+        }).eq('user_id', app_user_id).execute()
+        
+        supabase.table('users').update({'subscription_active': False}).eq('id', app_user_id).execute()
     
     return {"status": "success"}
 
@@ -1023,7 +1062,3 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-@app.on_event("shutdown")
-async def shutdown_db_client():
-    client.close()
