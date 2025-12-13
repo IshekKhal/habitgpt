@@ -11,7 +11,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useStore } from '../src/store/useStore';
-import { COLORS, SPACING, FONTS, BORDER_RADIUS } from '../src/constants/theme';
+import { COLORS, SPACING, FONTS, BORDER_RADIUS, MICROCOPY } from '../src/constants/theme';
 
 const { width, height } = Dimensions.get('window');
 
@@ -40,7 +40,7 @@ export default function WelcomeScreen() {
         {/* Logo Section */}
         <View style={styles.logoSection}>
           <View style={styles.logoContainer}>
-            <Ionicons name="leaf" size={64} color={COLORS.primary} />
+            <Ionicons name="leaf" size={56} color={COLORS.primary} />
           </View>
           <Text style={styles.appName}>HabitGPT</Text>
           <Text style={styles.tagline}>Grow any habit in 29 days</Text>
@@ -49,32 +49,32 @@ export default function WelcomeScreen() {
         {/* Features Section */}
         <View style={styles.featuresSection}>
           <View style={styles.featureItem}>
-            <View style={[styles.featureIcon, { backgroundColor: COLORS.primary + '20' }]}>
+            <View style={styles.featureIcon}>
               <Ionicons name="calendar-outline" size={24} color={COLORS.primary} />
             </View>
             <View style={styles.featureText}>
               <Text style={styles.featureTitle}>29-Day Framework</Text>
-              <Text style={styles.featureDesc}>Science-backed habit formation timeline</Text>
+              <Text style={styles.featureDesc}>Science-backed habit formation</Text>
             </View>
           </View>
 
           <View style={styles.featureItem}>
-            <View style={[styles.featureIcon, { backgroundColor: COLORS.secondary + '20' }]}>
-              <Ionicons name="analytics-outline" size={24} color={COLORS.secondary} />
+            <View style={styles.featureIcon}>
+              <Ionicons name="sparkles-outline" size={24} color={COLORS.primary} />
             </View>
             <View style={styles.featureText}>
               <Text style={styles.featureTitle}>Personalized Coaching</Text>
-              <Text style={styles.featureDesc}>AI adapts to your style and patterns</Text>
+              <Text style={styles.featureDesc}>AI adapts to your style</Text>
             </View>
           </View>
 
           <View style={styles.featureItem}>
-            <View style={[styles.featureIcon, { backgroundColor: COLORS.accent + '20' }]}>
-              <Ionicons name="trending-up-outline" size={24} color={COLORS.accent} />
+            <View style={styles.featureIcon}>
+              <Ionicons name="flame-outline" size={24} color={COLORS.primary} />
             </View>
             <View style={styles.featureText}>
-              <Text style={styles.featureTitle}>Track Progress</Text>
-              <Text style={styles.featureDesc}>Visual streaks and milestone celebrations</Text>
+              <Text style={styles.featureTitle}>Track Your Streak</Text>
+              <Text style={styles.featureDesc}>Build momentum day by day</Text>
             </View>
           </View>
         </View>
@@ -91,7 +91,7 @@ export default function WelcomeScreen() {
           </TouchableOpacity>
 
           <Text style={styles.disclaimer}>
-            First month free • Build habits that stick
+            {MICROCOPY.firstHabit.title} • {MICROCOPY.firstHabit.subtitle}
           </Text>
         </View>
       </SafeAreaView>
@@ -106,7 +106,7 @@ const styles = StyleSheet.create({
   },
   safeArea: {
     flex: 1,
-    paddingHorizontal: SPACING.lg,
+    paddingHorizontal: SPACING.xl,
   },
   logoSection: {
     flex: 1,
@@ -114,23 +114,25 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   logoContainer: {
-    width: 120,
-    height: 120,
-    borderRadius: 30,
-    backgroundColor: COLORS.primary + '15',
+    width: 100,
+    height: 100,
+    borderRadius: 28,
+    backgroundColor: COLORS.backgroundCard,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: SPACING.lg,
   },
   appName: {
-    fontSize: FONTS.size.title,
-    fontWeight: 'bold',
+    fontSize: FONTS.size.hero,
+    fontWeight: '700',
     color: COLORS.textPrimary,
     marginBottom: SPACING.xs,
+    letterSpacing: -1,
   },
   tagline: {
     fontSize: FONTS.size.lg,
     color: COLORS.textSecondary,
+    letterSpacing: -0.3,
   },
   featuresSection: {
     flex: 1,
@@ -146,6 +148,7 @@ const styles = StyleSheet.create({
     width: 48,
     height: 48,
     borderRadius: BORDER_RADIUS.md,
+    backgroundColor: COLORS.backgroundCard,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -157,6 +160,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: COLORS.textPrimary,
     marginBottom: 2,
+    letterSpacing: -0.2,
   },
   featureDesc: {
     fontSize: FONTS.size.sm,
@@ -184,5 +188,6 @@ const styles = StyleSheet.create({
     color: COLORS.textMuted,
     textAlign: 'center',
     marginTop: SPACING.md,
+    lineHeight: 20,
   },
 });

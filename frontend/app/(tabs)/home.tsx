@@ -12,60 +12,60 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useStore } from '../../src/store/useStore';
-import { getUserSkillInstances, deleteSkillInstance } from '../../src/services/api';
-import { SkillCard } from '../../src/components/SkillCard';
-import { COLORS, SPACING, FONTS, BORDER_RADIUS } from '../../src/constants/theme';
+import { getUserHabitInstances, deleteHabitInstance } from '../../src/services/api';
+import { HabitCard } from '../../src/components/HabitCard';
+import { COLORS, SPACING, FONTS, BORDER_RADIUS, MICROCOPY } from '../../src/constants/theme';
 
 export default function HomeScreen() {
-  const { user, skillInstances, setSkillInstances, removeSkillInstance } = useStore();
+  const { user, habitInstances, setHabitInstances, removeHabitInstance } = useStore();
   const [refreshing, setRefreshing] = useState(false);
 
-  const fetchSkills = async () => {
+  const fetchHabits = async () => {
     if (!user?.id) return;
     try {
-      const instances = await getUserSkillInstances(user.id);
-      setSkillInstances(instances);
+      const instances = await getUserHabitInstances(user.id);
+      setHabitInstances(instances);
     } catch (error) {
-      console.error('Failed to fetch skills:', error);
+      console.error('Failed to fetch habits:', error);
     }
   };
 
   useFocusEffect(
     useCallback(() => {
-      fetchSkills();
+      fetchHabits();
     }, [user?.id])
   );
 
   const onRefresh = async () => {
     setRefreshing(true);
-    await fetchSkills();
+    await fetchHabits();
     setRefreshing(false);
   };
 
-  const handleAddSkill = () => {
-    router.push('/skill-chat');
+  const handleAddHabit = () => {
+    router.push('/habit-chat');
   };
 
-  const handleSkillPress = (skillId: string) => {
-    router.push(`/skill-roadmap/${skillId}`);
+  const handleHabitPress = (habitId: string) => {
+    router.push(`/habit-roadmap/${habitId}`);
   };
 
-  const handleSkillLongPress = (skillId: string, skillName: string) => {
+  const handleHabitLongPress = (habitId: string, habitName: string) => {
     Alert.alert(
-      'Delete Skill',
-      `Are you sure you want to delete "${skillName}"? This action cannot be undone.`,
+      'Remove Habit',
+      `Are you sure you want to remove "${habitName}"? This action cannot be undone.`,
       [
         { text: 'Cancel', style: 'cancel' },
         {
-          text: 'Delete',
+          text: 'Remove',
           style: 'destructive',
           onPress: async () => {
             try {
-              await deleteSkillInstance(skillId);
-              removeSkillInstance(skillId);
+              await deleteHabitInstance(habitId);
+              removeHabitInstance(habitId);
             } catch (error) {
-              console.error('Failed to delete skill:', error);
-              Alert.alert('Error', 'Failed to delete skill. Please try again.');
+              console.error('Failed to delete habit:', error);
+              Alert.alert('Error', 'Failed to remove habit. Please try again.');
             }
           },
         },
@@ -76,29 +76,37 @@ export default function HomeScreen() {
   const renderEmptyState = () => (
     <View style={styles.emptyState}>
       <View style={styles.emptyIconContainer}>
-        <Ionicons name="bulb-outline" size={64} color={COLORS.primary} />
+        <Ionicons name="leaf-outline" size={56} color={COLORS.primary} />
       </View>
-      <Text style={styles.emptyTitle}>Start Learning a New Skill</Text>
-      <Text style={styles.emptySubtitle}>
-        Tap the + button below to begin your journey
-      </Text>
+      <Text style={styles.emptyTitle}>{MICROCOPY.emptyHabits.title}</Text>
+      <Text style={styles.emptySubtitle}>{MICROCOPY.emptyHabits.subtitle}</Text>
       <TouchableOpacity style={styles.trialBanner} activeOpacity={0.8}>
-        <Ionicons name="gift-outline" size={20} color={COLORS.secondary} />
-        <Text style={styles.trialText}>Learn your first skill FREE for 90 days</Text>
+        <Ionicons name="sparkles" size={18} color={COLORS.secondary} />
+        <Text style={styles.trialText}>{MICROCOPY.firstHabit.title}</Text>
       </TouchableOpacity>
     </View>
   );
+
+  const getGreeting = () => {
+    const hour = new Date().getHours();
+    if (hour < 12) return 'Good morning';
+    if (hour < 17) return 'Good afternoon';
+    return 'Good evening';
+  };
 
   return (
     <SafeAreaView style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
         <View>
-          <Text style={styles.greeting}>Hello, {user?.name?.split(' ')[0] || 'Learner'}</Text>
-          <Text style={styles.subGreeting}>Ready to learn something new?</Text>
+          <Text style={styles.greeting}>{getGreeting()}, {user?.name?.split(' ')[0] || 'there'}</Text>
+          <Text style={styles.subGreeting}>Small steps, big changes</Text>
         </View>
-        <TouchableOpacity style={styles.notificationButton}>
-          <Ionicons name="notifications-outline" size={24} color={COLORS.textPrimary} />
+        <TouchableOpacity 
+          style={styles.notificationButton}
+          onPress={() => router.push('/notification-settings')}
+        >
+          <Ionicons name="notifications-outline" size={22} color={COLORS.textPrimary} />
         </TouchableOpacity>
       </View>
 
@@ -115,17 +123,17 @@ export default function HomeScreen() {
           />
         }
       >
-        {skillInstances.length === 0 ? (
+        {habitInstances.length === 0 ? (
           renderEmptyState()
         ) : (
-          <View style={styles.skillsContainer}>
-            <Text style={styles.sectionTitle}>Your Skills</Text>
-            {skillInstances.map((skill) => (
-              <SkillCard
-                key={skill.id}
-                skill={skill}
-                onPress={() => handleSkillPress(skill.id)}
-                onLongPress={() => handleSkillLongPress(skill.id, skill.skill_name)}
+          <View style={styles.habitsContainer}>
+            <Text style={styles.sectionTitle}>Your Habits</Text>
+            {habitInstances.map((habit) => (
+              <HabitCard
+                key={habit.id}
+                habit={habit}
+                onPress={() => handleHabitPress(habit.id)}
+                onLongPress={() => handleHabitLongPress(habit.id, habit.habit_name)}
               />
             ))}
           </View>
@@ -135,10 +143,10 @@ export default function HomeScreen() {
       {/* FAB */}
       <TouchableOpacity
         style={styles.fab}
-        onPress={handleAddSkill}
+        onPress={handleAddHabit}
         activeOpacity={0.8}
       >
-        <Ionicons name="add" size={32} color={COLORS.textPrimary} />
+        <Ionicons name="add" size={28} color={COLORS.textLight} />
       </TouchableOpacity>
     </SafeAreaView>
   );
@@ -153,13 +161,14 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: SPACING.lg,
-    paddingVertical: SPACING.md,
+    paddingHorizontal: SPACING.xl,
+    paddingVertical: SPACING.lg,
   },
   greeting: {
-    fontSize: FONTS.size.xl,
-    fontWeight: 'bold',
+    fontSize: FONTS.size.xxl,
+    fontWeight: '600',
     color: COLORS.textPrimary,
+    letterSpacing: -0.5,
   },
   subGreeting: {
     fontSize: FONTS.size.sm,
@@ -179,8 +188,8 @@ const styles = StyleSheet.create({
   },
   contentContainer: {
     flexGrow: 1,
-    paddingHorizontal: SPACING.lg,
-    paddingBottom: 100,
+    paddingHorizontal: SPACING.xl,
+    paddingBottom: 120,
   },
   emptyState: {
     flex: 1,
@@ -189,19 +198,20 @@ const styles = StyleSheet.create({
     paddingVertical: SPACING.xxl,
   },
   emptyIconContainer: {
-    width: 120,
-    height: 120,
-    borderRadius: 30,
-    backgroundColor: COLORS.primary + '15',
+    width: 100,
+    height: 100,
+    borderRadius: 28,
+    backgroundColor: COLORS.backgroundCard,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: SPACING.lg,
   },
   emptyTitle: {
-    fontSize: FONTS.size.xl,
-    fontWeight: 'bold',
+    fontSize: FONTS.size.xxl,
+    fontWeight: '600',
     color: COLORS.textPrimary,
     marginBottom: SPACING.xs,
+    letterSpacing: -0.5,
   },
   emptySubtitle: {
     fontSize: FONTS.size.md,
@@ -212,9 +222,9 @@ const styles = StyleSheet.create({
   trialBanner: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: COLORS.secondary + '20',
-    borderRadius: BORDER_RADIUS.md,
-    paddingHorizontal: SPACING.md,
+    backgroundColor: COLORS.backgroundCard,
+    borderRadius: BORDER_RADIUS.full,
+    paddingHorizontal: SPACING.lg,
     paddingVertical: SPACING.sm,
     gap: SPACING.sm,
   },
@@ -223,29 +233,32 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: COLORS.secondary,
   },
-  skillsContainer: {
+  habitsContainer: {
     paddingTop: SPACING.md,
   },
   sectionTitle: {
     fontSize: FONTS.size.lg,
-    fontWeight: 'bold',
+    fontWeight: '600',
     color: COLORS.textPrimary,
     marginBottom: SPACING.md,
+    letterSpacing: -0.3,
   },
   fab: {
     position: 'absolute',
     bottom: 100,
     alignSelf: 'center',
-    width: 64,
-    height: 64,
-    borderRadius: 32,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
     backgroundColor: COLORS.primary,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: COLORS.primary,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.4,
-    shadowRadius: 8,
-    elevation: 8,
+    ...{
+      shadowColor: COLORS.primary,
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: 0.3,
+      shadowRadius: 8,
+      elevation: 8,
+    },
   },
 });
