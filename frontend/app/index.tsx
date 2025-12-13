@@ -8,7 +8,6 @@ import {
   Dimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useStore } from '../src/store/useStore';
@@ -36,71 +35,66 @@ export default function WelcomeScreen() {
 
   return (
     <View style={styles.container}>
-      <StatusBar barStyle="light-content" />
-      <LinearGradient
-        colors={[COLORS.background, COLORS.backgroundLight, COLORS.background]}
-        style={styles.gradient}
-      >
-        <SafeAreaView style={styles.safeArea}>
-          {/* Logo Section */}
-          <View style={styles.logoSection}>
-            <View style={styles.logoContainer}>
-              <Ionicons name="flash" size={64} color={COLORS.primary} />
-            </View>
-            <Text style={styles.appName}>SkillGPT</Text>
-            <Text style={styles.tagline}>Master any skill in 90 days</Text>
+      <StatusBar barStyle="dark-content" />
+      <SafeAreaView style={styles.safeArea}>
+        {/* Logo Section */}
+        <View style={styles.logoSection}>
+          <View style={styles.logoContainer}>
+            <Ionicons name="leaf" size={64} color={COLORS.primary} />
           </View>
+          <Text style={styles.appName}>HabitGPT</Text>
+          <Text style={styles.tagline}>Grow any habit in 29 days</Text>
+        </View>
 
-          {/* Features Section */}
-          <View style={styles.featuresSection}>
-            <View style={styles.featureItem}>
-              <View style={styles.featureIcon}>
-                <Ionicons name="rocket-outline" size={24} color={COLORS.secondary} />
-              </View>
-              <View style={styles.featureText}>
-                <Text style={styles.featureTitle}>AI-Powered Roadmaps</Text>
-                <Text style={styles.featureDesc}>Personalized learning paths tailored to you</Text>
-              </View>
+        {/* Features Section */}
+        <View style={styles.featuresSection}>
+          <View style={styles.featureItem}>
+            <View style={[styles.featureIcon, { backgroundColor: COLORS.primary + '20' }]}>
+              <Ionicons name="calendar-outline" size={24} color={COLORS.primary} />
             </View>
-
-            <View style={styles.featureItem}>
-              <View style={styles.featureIcon}>
-                <Ionicons name="calendar-outline" size={24} color={COLORS.accent} />
-              </View>
-              <View style={styles.featureText}>
-                <Text style={styles.featureTitle}>Daily Tasks</Text>
-                <Text style={styles.featureDesc}>Bite-sized learning activities every day</Text>
-              </View>
-            </View>
-
-            <View style={styles.featureItem}>
-              <View style={styles.featureIcon}>
-                <Ionicons name="trophy-outline" size={24} color={COLORS.primary} />
-              </View>
-              <View style={styles.featureText}>
-                <Text style={styles.featureTitle}>Track Progress</Text>
-                <Text style={styles.featureDesc}>Visual timeline to see your growth</Text>
-              </View>
+            <View style={styles.featureText}>
+              <Text style={styles.featureTitle}>29-Day Framework</Text>
+              <Text style={styles.featureDesc}>Science-backed habit formation timeline</Text>
             </View>
           </View>
 
-          {/* CTA Section */}
-          <View style={styles.ctaSection}>
-            <TouchableOpacity
-              style={styles.primaryButton}
-              onPress={handleGetStarted}
-              activeOpacity={0.8}
-            >
-              <Text style={styles.primaryButtonText}>Get Started</Text>
-              <Ionicons name="arrow-forward" size={20} color={COLORS.textPrimary} />
-            </TouchableOpacity>
-
-            <Text style={styles.disclaimer}>
-              Your first skill is free for 90 days
-            </Text>
+          <View style={styles.featureItem}>
+            <View style={[styles.featureIcon, { backgroundColor: COLORS.secondary + '20' }]}>
+              <Ionicons name="analytics-outline" size={24} color={COLORS.secondary} />
+            </View>
+            <View style={styles.featureText}>
+              <Text style={styles.featureTitle}>Personalized Coaching</Text>
+              <Text style={styles.featureDesc}>AI adapts to your style and patterns</Text>
+            </View>
           </View>
-        </SafeAreaView>
-      </LinearGradient>
+
+          <View style={styles.featureItem}>
+            <View style={[styles.featureIcon, { backgroundColor: COLORS.accent + '20' }]}>
+              <Ionicons name="trending-up-outline" size={24} color={COLORS.accent} />
+            </View>
+            <View style={styles.featureText}>
+              <Text style={styles.featureTitle}>Track Progress</Text>
+              <Text style={styles.featureDesc}>Visual streaks and milestone celebrations</Text>
+            </View>
+          </View>
+        </View>
+
+        {/* CTA Section */}
+        <View style={styles.ctaSection}>
+          <TouchableOpacity
+            style={styles.primaryButton}
+            onPress={handleGetStarted}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.primaryButtonText}>Get Started</Text>
+            <Ionicons name="arrow-forward" size={20} color={COLORS.textLight} />
+          </TouchableOpacity>
+
+          <Text style={styles.disclaimer}>
+            First month free • Build habits that stick
+          </Text>
+        </View>
+      </SafeAreaView>
     </View>
   );
 }
@@ -109,9 +103,6 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: COLORS.background,
-  },
-  gradient: {
-    flex: 1,
   },
   safeArea: {
     flex: 1,
@@ -126,7 +117,7 @@ const styles = StyleSheet.create({
     width: 120,
     height: 120,
     borderRadius: 30,
-    backgroundColor: COLORS.primary + '20',
+    backgroundColor: COLORS.primary + '15',
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: SPACING.lg,
@@ -155,7 +146,6 @@ const styles = StyleSheet.create({
     width: 48,
     height: 48,
     borderRadius: BORDER_RADIUS.md,
-    backgroundColor: COLORS.backgroundCard,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -187,7 +177,7 @@ const styles = StyleSheet.create({
   primaryButtonText: {
     fontSize: FONTS.size.lg,
     fontWeight: '600',
-    color: COLORS.textPrimary,
+    color: COLORS.textLight,
   },
   disclaimer: {
     fontSize: FONTS.size.sm,
