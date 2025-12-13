@@ -3,6 +3,7 @@ import * as Device from 'expo-device';
 import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios from 'axios';
+import { COACH_STYLES } from '../constants/theme';
 
 const API_URL = process.env.EXPO_PUBLIC_BACKEND_URL || '';
 
@@ -20,6 +21,7 @@ export interface NotificationPreferences {
   morningTime: string; // HH:MM format
   afternoonTime: string;
   eveningTime: string;
+  coachStyle: string; // gentle, structured, strict, adaptive
 }
 
 const DEFAULT_PREFERENCES: NotificationPreferences = {
@@ -27,6 +29,7 @@ const DEFAULT_PREFERENCES: NotificationPreferences = {
   morningTime: '09:00',
   afternoonTime: '14:00',
   eveningTime: '20:00',
+  coachStyle: 'adaptive',
 };
 
 // Request permissions and get push token
@@ -35,10 +38,10 @@ export async function registerForPushNotificationsAsync(): Promise<string | null
 
   if (Platform.OS === 'android') {
     await Notifications.setNotificationChannelAsync('daily-reminders', {
-      name: 'Daily Task Reminders',
+      name: 'Daily Habit Reminders',
       importance: Notifications.AndroidImportance.HIGH,
       vibrationPattern: [0, 250, 250, 250],
-      lightColor: '#6366F1',
+      lightColor: '#1A1A1A',
     });
   }
 
@@ -58,12 +61,11 @@ export async function registerForPushNotificationsAsync(): Promise<string | null
 
     try {
       const pushToken = await Notifications.getExpoPushTokenAsync({
-        projectId: 'your-project-id', // This will be replaced with actual project ID
+        projectId: 'your-project-id',
       });
       token = pushToken.data;
     } catch (error) {
       console.log('Error getting push token:', error);
-      // For development, use a device push token
       const deviceToken = await Notifications.getDevicePushTokenAsync();
       token = deviceToken.data;
     }
@@ -118,6 +120,16 @@ function parseTime(timeStr: string): { hours: number; minutes: number } {
   return { hours, minutes };
 }
 
+// Get notification messages based on coach style
+function getCoachMessages(coachStyle: string) {
+  const style = COACH_STYLES[coachStyle as keyof typeof COACH_STYLES] || COACH_STYLES.adaptive;
+  return {
+    morning: style.morningNotification,
+    afternoon: style.afternoonNotification,
+    evening: style.eveningNotification,
+  };
+}
+
 // Schedule a daily notification at specific time
 async function scheduleDailyNotification(
   identifier: string,
@@ -147,7 +159,7 @@ async function scheduleDailyNotification(
   });
 }
 
-// Schedule all three daily reminders
+// Schedule all three daily reminders with coach-style messages
 export async function scheduleAllDailyReminders(prefs?: NotificationPreferences): Promise<void> {
   const preferences = prefs || await getNotificationPreferences();
 
@@ -159,32 +171,34 @@ export async function scheduleAllDailyReminders(prefs?: NotificationPreferences)
   const morningTime = parseTime(preferences.morningTime);
   const afternoonTime = parseTime(preferences.afternoonTime);
   const eveningTime = parseTime(preferences.eveningTime);
+  
+  const messages = getCoachMessages(preferences.coachStyle);
 
   // Morning reminder
   await scheduleDailyNotification(
     'morning-reminder',
-    'Good Morning! Time to Learn',
-    'Start your day with some skill-building. Your daily tasks are waiting!',
+    'HabitGPT',
+    messages.morning,
     morningTime
   );
 
   // Afternoon reminder
   await scheduleDailyNotification(
     'afternoon-reminder',
-    'Afternoon Check-in',
-    "How's your learning going? Don't forget to complete today's tasks!",
+    'HabitGPT',
+    messages.afternoon,
     afternoonTime
   );
 
   // Evening reminder
   await scheduleDailyNotification(
     'evening-reminder',
-    'Evening Reminder',
-    'Wind down your day by finishing any remaining tasks. Keep your streak alive!',
+    'HabitGPT',
+    messages.evening,
     eveningTime
   );
 
-  console.log('All daily reminders scheduled');
+  console.log('All daily reminders scheduled with', preferences.coachStyle, 'style');
 }
 
 // Cancel all scheduled notifications
@@ -201,7 +215,7 @@ export async function sendImmediateNotification(title: string, body: string): Pr
       body,
       sound: true,
     },
-    trigger: null, // null means send immediately
+    trigger: null,
   });
 }
 
@@ -225,7 +239,7 @@ export function addNotificationReceivedListener(
 }
 
 // Initialize notifications for a user
-export async function initializeNotifications(userId: string): Promise<void> {
+export async function initializeNotifications(userId: string, coachStyle?: string): Promise<void> {
   // Request permissions and get token
   const token = await registerForPushNotificationsAsync();
   
@@ -234,8 +248,15 @@ export async function initializeNotifications(userId: string): Promise<void> {
     await savePushToken(userId, token);
   }
 
+  // Get current preferences and update coach style if provided
+  const prefs = await getNotificationPreferences();
+  if (coachStyle) {
+    prefs.coachStyle = coachStyle;
+    await AsyncStorage.setItem('notification_preferences', JSON.stringify(prefs));
+  }
+
   // Schedule daily reminders
-  await scheduleAllDailyReminders();
+  await scheduleAllDailyReminders(prefs);
 }
 
 // Update notification preferences on backend
@@ -253,4 +274,23 @@ export async function updateNotificationPreferencesOnServer(
   } catch (error) {
     console.error('Failed to update notification preferences on server:', error);
   }
+}
+
+// Send streak milestone notification
+export async function sendStreakMilestoneNotification(streakDays: number): Promise<void> {
+  const milestones = [3, 7, 14, 21, 29];
+  if (milestones.includes(streakDays)) {
+    await sendImmediateNotification(
+      'Streak Milestone! 🔥',
+      `${streakDays} days strong! You're building something real.`
+    );
+  }
+}
+
+// Send habit completion notification
+export async function sendHabitCompleteNotification(habitName: string): Promise<void> {
+  await sendImmediateNotification(
+    '29 Days Complete! 🎉',
+    `You did it! "${habitName}" is now part of who you are.`
+  );
 }

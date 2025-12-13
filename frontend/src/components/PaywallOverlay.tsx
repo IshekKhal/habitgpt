@@ -25,14 +25,14 @@ interface PaywallOverlayProps {
   visible: boolean;
   onSuccess: () => void;
   onClose?: () => void;
-  isFirstSkill?: boolean;
+  isFirstHabit?: boolean;
 }
 
 export const PaywallOverlay: React.FC<PaywallOverlayProps> = ({
   visible,
   onSuccess,
   onClose,
-  isFirstSkill = true,
+  isFirstHabit = true,
 }) => {
   const [loading, setLoading] = useState(true);
   const [purchasing, setPurchasing] = useState(false);
@@ -67,10 +67,10 @@ export const PaywallOverlay: React.FC<PaywallOverlayProps> = ({
       // For development/demo, simulate success
       Alert.alert(
         'Demo Mode',
-        'RevenueCat is not configured. In production, this would process the payment. Simulating success for demo.',
+        'RevenueCat is not configured. In production, this would process the payment. Starting your free trial.',
         [
           {
-            text: 'Continue',
+            text: 'Start Trial',
             onPress: () => onSuccess(),
           },
         ]
@@ -84,11 +84,11 @@ export const PaywallOverlay: React.FC<PaywallOverlayProps> = ({
       
       if (result.success) {
         Alert.alert(
-          'Welcome to SkillGPT!',
-          isFirstSkill 
-            ? 'Your first month is FREE! Start your learning journey now.'
-            : 'Subscription activated successfully!',
-          [{ text: 'Start Learning', onPress: () => onSuccess() }]
+          'Welcome to HabitGPT!',
+          isFirstHabit 
+            ? 'Your first 29 days are FREE! Start building your habit now.'
+            : 'Subscription activated. Let\'s keep growing!',
+          [{ text: 'Let\'s Go', onPress: () => onSuccess() }]
         );
       } else if (result.error && result.error !== 'Purchase cancelled') {
         Alert.alert('Purchase Failed', result.error);
@@ -136,7 +136,7 @@ export const PaywallOverlay: React.FC<PaywallOverlayProps> = ({
     >
       <View style={styles.container}>
         {/* Blur Background */}
-        <BlurView intensity={Platform.OS === 'ios' ? 50 : 100} style={styles.blur} tint="dark" />
+        <BlurView intensity={Platform.OS === 'ios' ? 40 : 80} style={styles.blur} tint="light" />
         
         {/* Content */}
         <View style={styles.content}>
@@ -144,32 +144,31 @@ export const PaywallOverlay: React.FC<PaywallOverlayProps> = ({
             {/* Close Button (only if allowed) */}
             {onClose && (
               <TouchableOpacity style={styles.closeButton} onPress={onClose}>
-                <Ionicons name="close" size={24} color={COLORS.textMuted} />
+                <Ionicons name="close" size={22} color={COLORS.textMuted} />
               </TouchableOpacity>
             )}
 
             {/* Header */}
             <View style={styles.header}>
               <View style={styles.iconContainer}>
-                <Ionicons name="rocket" size={48} color={COLORS.primary} />
+                <Ionicons name="leaf" size={40} color={COLORS.primary} />
               </View>
               
-              {isFirstSkill ? (
+              {isFirstHabit ? (
                 <>
-                  <Text style={styles.title}>Unlock Your Roadmap</Text>
+                  <Text style={styles.title}>Unlock Your Journey</Text>
                   <View style={styles.freeTrialBadge}>
-                    <Ionicons name="gift" size={16} color={COLORS.textPrimary} />
-                    <Text style={styles.freeTrialText}>FIRST MONTH FREE</Text>
+                    <Text style={styles.freeTrialText}>FIRST 29 DAYS FREE</Text>
                   </View>
                   <Text style={styles.subtitle}>
-                    Your personalized learning journey is ready! Start your free trial to access it.
+                    Your personalized habit roadmap is ready. Start your free trial to unlock it.
                   </Text>
                 </>
               ) : (
                 <>
-                  <Text style={styles.title}>Subscription Required</Text>
+                  <Text style={styles.title}>Continue Growing</Text>
                   <Text style={styles.subtitle}>
-                    Continue your learning journey by renewing your subscription.
+                    Renew your subscription to keep building habits.
                   </Text>
                 </>
               )}
@@ -199,14 +198,14 @@ export const PaywallOverlay: React.FC<PaywallOverlayProps> = ({
                 </View>
                 
                 <View style={styles.priceContainer}>
-                  {isFirstSkill && (
+                  {isFirstHabit && (
                     <Text style={styles.originalPrice}>{monthlyPrice}</Text>
                   )}
-                  <Text style={[styles.currentPrice, isFirstSkill && styles.freePrice]}>
-                    {isFirstSkill ? 'FREE' : monthlyPrice}
+                  <Text style={[styles.currentPrice, isFirstHabit && styles.freePrice]}>
+                    {isFirstHabit ? 'FREE' : monthlyPrice}
                   </Text>
                   <Text style={styles.priceSubtext}>
-                    {isFirstSkill ? `then ${monthlyPrice}/month` : 'per month'}
+                    {isFirstHabit ? `then ${monthlyPrice}/month` : 'per month'}
                   </Text>
                 </View>
                 
@@ -241,14 +240,14 @@ export const PaywallOverlay: React.FC<PaywallOverlayProps> = ({
                 </View>
                 
                 <View style={styles.priceContainer}>
-                  {isFirstSkill && (
+                  {isFirstHabit && (
                     <Text style={styles.originalPrice}>{yearlyPrice}</Text>
                   )}
-                  <Text style={[styles.currentPrice, isFirstSkill && styles.freePrice]}>
-                    {isFirstSkill ? 'FREE' : yearlyPrice}
+                  <Text style={[styles.currentPrice, isFirstHabit && styles.freePrice]}>
+                    {isFirstHabit ? 'FREE' : yearlyPrice}
                   </Text>
                   <Text style={styles.priceSubtext}>
-                    {isFirstSkill 
+                    {isFirstHabit 
                       ? `then ${yearlyPrice}/year (${yearlyMonthly}/mo)` 
                       : `${yearlyMonthly}/month, billed annually`}
                   </Text>
@@ -263,29 +262,21 @@ export const PaywallOverlay: React.FC<PaywallOverlayProps> = ({
             {/* Features */}
             <View style={styles.featuresContainer}>
               <View style={styles.featureItem}>
-                <Ionicons name="checkmark-circle" size={20} color={COLORS.secondary} />
-                <Text style={styles.featureText}>AI-powered personalized roadmaps</Text>
+                <Ionicons name="checkmark" size={18} color={COLORS.secondary} />
+                <Text style={styles.featureText}>Personalized 29-day roadmaps</Text>
               </View>
               <View style={styles.featureItem}>
-                <Ionicons name="checkmark-circle" size={20} color={COLORS.secondary} />
-                <Text style={styles.featureText}>Daily tasks & progress tracking</Text>
+                <Ionicons name="checkmark" size={18} color={COLORS.secondary} />
+                <Text style={styles.featureText}>Daily micro-tasks & progress tracking</Text>
               </View>
               <View style={styles.featureItem}>
-                <Ionicons name="checkmark-circle" size={20} color={COLORS.secondary} />
-                <Text style={styles.featureText}>Curated learning resources</Text>
+                <Ionicons name="checkmark" size={18} color={COLORS.secondary} />
+                <Text style={styles.featureText}>Coach-style reminders</Text>
               </View>
               <View style={styles.featureItem}>
-                <Ionicons name="checkmark-circle" size={20} color={COLORS.secondary} />
-                <Text style={styles.featureText}>Unlimited skills to learn</Text>
+                <Ionicons name="checkmark" size={18} color={COLORS.secondary} />
+                <Text style={styles.featureText}>Unlimited habits</Text>
               </View>
-            </View>
-
-            {/* Payment Methods */}
-            <View style={styles.paymentMethods}>
-              <Ionicons name="card" size={20} color={COLORS.textMuted} />
-              <Ionicons name="logo-apple" size={20} color={COLORS.textMuted} />
-              <Ionicons name="logo-google" size={20} color={COLORS.textMuted} />
-              <Ionicons name="logo-paypal" size={20} color={COLORS.textMuted} />
             </View>
           </ScrollView>
 
@@ -298,14 +289,11 @@ export const PaywallOverlay: React.FC<PaywallOverlayProps> = ({
               activeOpacity={0.8}
             >
               {purchasing ? (
-                <ActivityIndicator color={COLORS.textPrimary} />
+                <ActivityIndicator color={COLORS.textLight} />
               ) : (
-                <>
-                  <Text style={styles.ctaButtonText}>
-                    {isFirstSkill ? 'Start Free Trial' : 'Subscribe Now'}
-                  </Text>
-                  <Ionicons name="arrow-forward" size={20} color={COLORS.textPrimary} />
-                </>
+                <Text style={styles.ctaButtonText}>
+                  {isFirstHabit ? 'Start Free Trial' : 'Subscribe Now'}
+                </Text>
               )}
             </TouchableOpacity>
 
@@ -319,7 +307,7 @@ export const PaywallOverlay: React.FC<PaywallOverlayProps> = ({
 
             <Text style={styles.termsText}>
               By continuing, you agree to our Terms of Service and Privacy Policy.
-              {isFirstSkill && ' Your subscription will auto-renew after the trial period.'}
+              {isFirstHabit && ' Subscription auto-renews after trial.'}
             </Text>
           </View>
         </View>
@@ -338,15 +326,15 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
   },
   content: {
-    width: '95%',
+    width: '92%',
     maxWidth: 400,
-    maxHeight: '90%',
-    backgroundColor: COLORS.backgroundCard,
-    borderRadius: BORDER_RADIUS.xl,
+    maxHeight: '88%',
+    backgroundColor: COLORS.backgroundLight,
+    borderRadius: BORDER_RADIUS.xxl,
     overflow: 'hidden',
   },
   scrollContent: {
-    padding: SPACING.lg,
+    padding: SPACING.xl,
     paddingBottom: SPACING.md,
   },
   closeButton: {
@@ -358,38 +346,37 @@ const styles = StyleSheet.create({
   },
   header: {
     alignItems: 'center',
-    marginBottom: SPACING.lg,
+    marginBottom: SPACING.xl,
   },
   iconContainer: {
-    width: 80,
-    height: 80,
+    width: 72,
+    height: 72,
     borderRadius: 20,
-    backgroundColor: COLORS.primary + '20',
+    backgroundColor: COLORS.backgroundCard,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: SPACING.md,
   },
   title: {
     fontSize: FONTS.size.xxl,
-    fontWeight: 'bold',
+    fontWeight: '600',
     color: COLORS.textPrimary,
     marginBottom: SPACING.sm,
     textAlign: 'center',
+    letterSpacing: -0.5,
   },
   freeTrialBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: COLORS.secondary,
+    backgroundColor: COLORS.primary,
     borderRadius: BORDER_RADIUS.full,
     paddingHorizontal: SPACING.md,
     paddingVertical: SPACING.xs,
-    gap: SPACING.xs,
     marginBottom: SPACING.sm,
   },
   freeTrialText: {
-    fontSize: FONTS.size.sm,
-    fontWeight: 'bold',
-    color: COLORS.textPrimary,
+    fontSize: FONTS.size.xs,
+    fontWeight: '700',
+    color: COLORS.textLight,
+    letterSpacing: 0.5,
   },
   subtitle: {
     fontSize: FONTS.size.md,
@@ -402,8 +389,8 @@ const styles = StyleSheet.create({
     marginBottom: SPACING.lg,
   },
   planCard: {
-    backgroundColor: COLORS.backgroundLight,
-    borderRadius: BORDER_RADIUS.lg,
+    backgroundColor: COLORS.backgroundCard,
+    borderRadius: BORDER_RADIUS.xl,
     padding: SPACING.md,
     borderWidth: 2,
     borderColor: COLORS.border,
@@ -411,21 +398,20 @@ const styles = StyleSheet.create({
   },
   planCardSelected: {
     borderColor: COLORS.primary,
-    backgroundColor: COLORS.primary + '10',
   },
   savingsBadge: {
     position: 'absolute',
     top: -10,
     right: SPACING.md,
-    backgroundColor: COLORS.accent,
+    backgroundColor: COLORS.secondary,
     borderRadius: BORDER_RADIUS.sm,
     paddingHorizontal: SPACING.sm,
     paddingVertical: 2,
   },
   savingsBadgeText: {
     fontSize: FONTS.size.xs,
-    fontWeight: 'bold',
-    color: COLORS.textPrimary,
+    fontWeight: '700',
+    color: COLORS.textLight,
   },
   planHeader: {
     flexDirection: 'row',
@@ -466,7 +452,7 @@ const styles = StyleSheet.create({
   },
   currentPrice: {
     fontSize: FONTS.size.xxxl,
-    fontWeight: 'bold',
+    fontWeight: '600',
     color: COLORS.textPrimary,
   },
   freePrice: {
@@ -482,7 +468,7 @@ const styles = StyleSheet.create({
   },
   featuresContainer: {
     gap: SPACING.sm,
-    marginBottom: SPACING.lg,
+    marginBottom: SPACING.md,
   },
   featureItem: {
     flexDirection: 'row',
@@ -493,35 +479,27 @@ const styles = StyleSheet.create({
     fontSize: FONTS.size.sm,
     color: COLORS.textPrimary,
   },
-  paymentMethods: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    gap: SPACING.lg,
-    marginBottom: SPACING.sm,
-  },
   ctaContainer: {
     padding: SPACING.lg,
     paddingTop: SPACING.sm,
-    backgroundColor: COLORS.backgroundCard,
+    backgroundColor: COLORS.backgroundLight,
     borderTopWidth: 1,
     borderTopColor: COLORS.border,
   },
   ctaButton: {
-    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: COLORS.primary,
     borderRadius: BORDER_RADIUS.md,
     paddingVertical: SPACING.md,
-    gap: SPACING.sm,
   },
   ctaButtonDisabled: {
-    backgroundColor: COLORS.primary + '80',
+    opacity: 0.7,
   },
   ctaButtonText: {
     fontSize: FONTS.size.lg,
     fontWeight: '600',
-    color: COLORS.textPrimary,
+    color: COLORS.textLight,
   },
   restoreButton: {
     alignItems: 'center',
@@ -530,7 +508,7 @@ const styles = StyleSheet.create({
   },
   restoreText: {
     fontSize: FONTS.size.sm,
-    color: COLORS.primary,
+    color: COLORS.textSecondary,
   },
   termsText: {
     fontSize: FONTS.size.xs,

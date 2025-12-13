@@ -13,10 +13,10 @@ const API_URL = process.env.EXPO_PUBLIC_BACKEND_URL || '';
 const REVENUECAT_API_KEY_IOS = process.env.EXPO_PUBLIC_REVENUECAT_IOS_KEY || 'appl_YOUR_IOS_KEY';
 const REVENUECAT_API_KEY_ANDROID = process.env.EXPO_PUBLIC_REVENUECAT_ANDROID_KEY || 'goog_YOUR_ANDROID_KEY';
 
-// Product Identifiers
+// Product Identifiers - Updated for HabitGPT
 export const PRODUCT_IDS = {
-  MONTHLY: 'skillgpt_monthly_1999',
-  YEARLY: 'skillgpt_yearly_15999',
+  MONTHLY: 'habitgpt_monthly_1999',
+  YEARLY: 'habitgpt_yearly_15999',
 };
 
 // Entitlement Identifier
