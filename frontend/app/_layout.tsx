@@ -80,8 +80,8 @@ export default function RootLayout() {
           <Stack.Screen name="onboarding/[step]" />
           <Stack.Screen name="auth" />
           <Stack.Screen name="(tabs)" />
-          <Stack.Screen name="skill-chat" options={{ presentation: 'modal' }} />
-          <Stack.Screen name="skill-roadmap/[id]" />
+          <Stack.Screen name="habit-chat" options={{ presentation: 'modal' }} />
+          <Stack.Screen name="habit-roadmap/[id]" />
           <Stack.Screen name="payment" options={{ presentation: 'modal' }} />
           <Stack.Screen name="notification-settings" options={{ presentation: 'modal' }} />
         </Stack>
