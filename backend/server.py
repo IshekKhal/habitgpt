@@ -559,6 +559,140 @@ async def get_daily_tasks(instance_id: str, day_number: int):
     
     raise HTTPException(status_code=404, detail="Day plan not found")
 
+# ==================== NOTIFICATION MODELS ====================
+
+class NotificationPreferences(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    user_id: str
+    push_token: Optional[str] = None
+    platform: Optional[str] = None  # ios, android
+    daily_reminders: bool = True
+    morning_time: str = "09:00"
+    afternoon_time: str = "14:00"
+    evening_time: str = "20:00"
+    milestone_alerts: bool = True
+    streak_notifications: bool = True
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+class RegisterPushTokenRequest(BaseModel):
+    user_id: str
+    push_token: str
+    platform: str  # ios, android
+
+class UpdateNotificationPrefsRequest(BaseModel):
+    daily_reminders: Optional[bool] = None
+    morning_time: Optional[str] = None
+    afternoon_time: Optional[str] = None
+    evening_time: Optional[str] = None
+    milestone_alerts: Optional[bool] = None
+    streak_notifications: Optional[bool] = None
+
+# ==================== NOTIFICATION ROUTES ====================
+
+@api_router.post("/notifications/register")
+async def register_push_token(request: RegisterPushTokenRequest):
+    """Register a push token for a user"""
+    # Check if preferences already exist for this user
+    existing = await db.notification_preferences.find_one({"user_id": request.user_id})
+    
+    if existing:
+        # Update existing preferences with new token
+        await db.notification_preferences.update_one(
+            {"user_id": request.user_id},
+            {"$set": {
+                "push_token": request.push_token,
+                "platform": request.platform,
+                "updated_at": datetime.utcnow()
+            }}
+        )
+        return {"status": "success", "message": "Push token updated"}
+    else:
+        # Create new preferences
+        prefs = NotificationPreferences(
+            user_id=request.user_id,
+            push_token=request.push_token,
+            platform=request.platform
+        )
+        await db.notification_preferences.insert_one(prefs.dict())
+        return {"status": "success", "message": "Push token registered"}
+
+@api_router.get("/notifications/preferences/{user_id}")
+async def get_notification_preferences(user_id: str):
+    """Get notification preferences for a user"""
+    prefs = await db.notification_preferences.find_one({"user_id": user_id})
+    if not prefs:
+        # Return default preferences
+        return NotificationPreferences(user_id=user_id)
+    return NotificationPreferences(**prefs)
+
+@api_router.put("/notifications/preferences/{user_id}")
+async def update_notification_preferences(user_id: str, request: UpdateNotificationPrefsRequest):
+    """Update notification preferences for a user"""
+    updates = {k: v for k, v in request.dict().items() if v is not None}
+    updates["updated_at"] = datetime.utcnow()
+    
+    existing = await db.notification_preferences.find_one({"user_id": user_id})
+    
+    if existing:
+        await db.notification_preferences.update_one(
+            {"user_id": user_id},
+            {"$set": updates}
+        )
+    else:
+        # Create new preferences with updates
+        prefs = NotificationPreferences(user_id=user_id, **request.dict())
+        await db.notification_preferences.insert_one(prefs.dict())
+    
+    return {"status": "success", "message": "Notification preferences updated"}
+
+@api_router.get("/notifications/users-to-notify")
+async def get_users_to_notify():
+    """Get all users with push tokens enabled for notifications (for server-side push)"""
+    users = await db.notification_preferences.find({
+        "daily_reminders": True,
+        "push_token": {"$ne": None}
+    }).to_list(1000)
+    
+    return [{"user_id": u["user_id"], "push_token": u["push_token"], "platform": u.get("platform")} for u in users]
+
+@api_router.get("/notifications/pending-tasks/{user_id}")
+async def get_pending_tasks_count(user_id: str):
+    """Get count of pending tasks for today for a user"""
+    # Get all active skill instances for user
+    instances = await db.skill_instances.find({
+        "user_id": user_id,
+        "status": "active"
+    }).to_list(100)
+    
+    total_pending = 0
+    skill_summaries = []
+    
+    for instance in instances:
+        skill_instance = SkillInstance(**instance)
+        if skill_instance.roadmap:
+            # Calculate current day
+            start_date = skill_instance.start_date
+            today = datetime.utcnow()
+            current_day = max(1, (today - start_date).days + 1)
+            
+            # Find today's day plan
+            for day_plan in skill_instance.roadmap.day_plans:
+                if day_plan.day_number == current_day:
+                    incomplete_tasks = sum(1 for t in day_plan.tasks if not t.completed)
+                    total_pending += incomplete_tasks
+                    if incomplete_tasks > 0:
+                        skill_summaries.append({
+                            "skill_name": skill_instance.skill_name,
+                            "pending_tasks": incomplete_tasks
+                        })
+                    break
+    
+    return {
+        "total_pending": total_pending,
+        "skills": skill_summaries
+    }
+
 # Trial/Payment Routes
 @api_router.post("/users/{user_id}/start-trial")
 async def start_trial(user_id: str):
