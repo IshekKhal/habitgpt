@@ -300,14 +300,20 @@ CREATE INDEX idx_payments_user_id ON payments(user_id);
 CREATE TABLE notification_preferences (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     user_id UUID REFERENCES users(id) ON DELETE CASCADE NOT NULL UNIQUE,
+    push_token TEXT,
+    platform VARCHAR(20), -- ios, android
     daily_reminders BOOLEAN DEFAULT TRUE,
-    reminder_time TIME DEFAULT '09:00:00',
+    morning_time TIME DEFAULT '09:00:00',
+    afternoon_time TIME DEFAULT '14:00:00',
+    evening_time TIME DEFAULT '20:00:00',
     milestone_alerts BOOLEAN DEFAULT TRUE,
     streak_notifications BOOLEAN DEFAULT TRUE,
-    push_token TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
+
+-- Index for user lookup
+CREATE INDEX idx_notification_preferences_user_id ON notification_preferences(user_id);
 
 -- ============================================
 -- ROW LEVEL SECURITY (RLS) POLICIES
