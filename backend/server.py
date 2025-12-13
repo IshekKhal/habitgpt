@@ -153,7 +153,7 @@ class TaskCompletionRequest(BaseModel):
 
 def get_gemini_model():
     """Get the Gemini model for chat"""
-    return genai.GenerativeModel('gemini-2.0-flash')
+    return genai.GenerativeModel('gemini-2.5-flash')
 
 async def generate_skill_clarification(user_message: str, chat_history: List[Dict[str, str]], onboarding_profile: Optional[dict] = None):
     """Generate clarifying questions for skill selection using Gemini"""
