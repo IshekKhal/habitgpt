@@ -9,24 +9,96 @@ import {
   Dimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { BlurView } from 'expo-blur';
 import { useLocalSearchParams, router, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { BarChart } from 'react-native-gifted-charts';
 import { useStore, SkillInstance, DayPlan } from '../../src/store/useStore';
-import { getSkillInstance, completeTask } from '../../src/services/api';
+import { getSkillInstance, completeTask, checkSubscriptionStatus } from '../../src/services/api';
 import { TaskItem } from '../../src/components/TaskItem';
+import { PaywallOverlay } from '../../src/components/PaywallOverlay';
+import { hasActiveSubscription, syncSubscriptionWithBackend } from '../../src/services/revenuecat';
 import { COLORS, SPACING, FONTS, BORDER_RADIUS } from '../../src/constants/theme';
 import { differenceInDays, format, addDays } from 'date-fns';
 
 const { width } = Dimensions.get('window');
 
 export default function SkillRoadmapScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
-  const { updateSkillInstance } = useStore();
+  const { id, isNew } = useLocalSearchParams<{ id: string; isNew?: string }>();
+  const { user, subscriptionStatus, setSubscriptionStatus, updateSkillInstance, skillInstances } = useStore();
   const [skill, setSkill] = useState<SkillInstance | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [selectedDay, setSelectedDay] = useState<number>(1);
   const [activeTab, setActiveTab] = useState<'tasks' | 'resources' | 'milestones'>('tasks');
+  
+  // Paywall states
+  const [showPaywall, setShowPaywall] = useState(false);
+  const [isFirstSkill, setIsFirstSkill] = useState(true);
+  const [contentBlurred, setContentBlurred] = useState(false);
+
+  // Check if this is user's first skill
+  useEffect(() => {
+    const otherSkills = skillInstances.filter(s => s.id !== id);
+    setIsFirstSkill(otherSkills.length === 0);
+  }, [skillInstances, id]);
+
+  // Check subscription status when screen loads
+  useEffect(() => {
+    checkAndShowPaywall();
+  }, [id, isNew]);
+
+  const checkAndShowPaywall = async () => {
+    // If this is a newly created skill (coming from payment flow), show paywall
+    if (isNew === 'true') {
+      setShowPaywall(true);
+      setContentBlurred(true);
+      return;
+    }
+
+    // Check subscription status
+    try {
+      const hasSubscription = await hasActiveSubscription();
+      
+      if (!hasSubscription) {
+        // Check backend subscription status as backup
+        if (user?.id) {
+          const backendStatus = await checkSubscriptionStatus(user.id);
+          if (!backendStatus.is_subscribed) {
+            setShowPaywall(true);
+            setContentBlurred(true);
+          }
+        } else {
+          setShowPaywall(true);
+          setContentBlurred(true);
+        }
+      }
+    } catch (error) {
+      console.error('Error checking subscription:', error);
+      // On error, check if user has trial
+      if (!user?.trial_started && !subscriptionStatus.isSubscribed) {
+        setShowPaywall(true);
+        setContentBlurred(true);
+      }
+    }
+  };
+
+  const handlePaywallSuccess = async () => {
+    // Sync subscription with backend
+    if (user?.id) {
+      await syncSubscriptionWithBackend(user.id);
+    }
+    
+    // Update local subscription status
+    setSubscriptionStatus({
+      isSubscribed: true,
+      isTrialActive: isFirstSkill,
+      willRenew: true,
+    });
+    
+    // Remove blur and hide paywall
+    setShowPaywall(false);
+    setContentBlurred(false);
+  };
 
   const fetchSkill = async () => {
     if (!id) return;
@@ -53,6 +125,8 @@ export default function SkillRoadmapScreen() {
   const onRefresh = async () => {
     setRefreshing(true);
     await fetchSkill();
+    // Also re-check subscription
+    await checkAndShowPaywall();
     setRefreshing(false);
   };
 
@@ -61,7 +135,7 @@ export default function SkillRoadmapScreen() {
   };
 
   const handleTaskToggle = async (taskId: string) => {
-    if (!skill || !id) return;
+    if (!skill || !id || contentBlurred) return;
     
     try {
       const result = await completeTask(id, taskId, selectedDay);
@@ -131,7 +205,7 @@ export default function SkillRoadmapScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* Header */}
+      {/* Header - Always visible */}
       <View style={styles.header}>
         <TouchableOpacity onPress={handleBack} style={styles.backButton}>
           <Ionicons name="arrow-back" size={24} color={COLORS.textPrimary} />
@@ -145,172 +219,192 @@ export default function SkillRoadmapScreen() {
         <View style={{ width: 40 }} />
       </View>
 
-      <ScrollView
-        style={styles.content}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={COLORS.primary} />
-        }
-        showsVerticalScrollIndicator={false}
-      >
-        {/* Progress Chart */}
-        <View style={styles.chartContainer}>
-          <Text style={styles.sectionTitle}>Progress Timeline</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-            <BarChart
-              data={getChartData()}
-              width={Math.max(width - 64, getChartData().length * 40)}
-              height={120}
-              barWidth={24}
-              barBorderRadius={4}
-              frontColor={COLORS.primary}
-              backgroundColor={COLORS.backgroundCard}
-              yAxisThickness={0}
-              xAxisThickness={1}
-              xAxisColor={COLORS.border}
-              xAxisLabelTextStyle={{ color: COLORS.textMuted, fontSize: 10 }}
-              noOfSections={4}
-              maxValue={100}
-              hideYAxisText
-              onPress={(item: any, index: number) => setSelectedDay(index + 1)}
-            />
-          </ScrollView>
-        </View>
-
-        {/* Day Selector */}
-        <View style={styles.daySelector}>
-          <TouchableOpacity
-            style={styles.daySelectorButton}
-            onPress={() => setSelectedDay(Math.max(1, selectedDay - 1))}
-            disabled={selectedDay <= 1}
-          >
-            <Ionicons name="chevron-back" size={24} color={selectedDay <= 1 ? COLORS.textMuted : COLORS.textPrimary} />
-          </TouchableOpacity>
-          <View style={styles.dayInfo}>
-            <Text style={styles.dayNumber}>Day {selectedDay}</Text>
-            <Text style={styles.dayDate}>
-              {format(addDays(startDate, selectedDay - 1), 'MMM d, yyyy')}
-            </Text>
+      {/* Main Content */}
+      <View style={styles.mainContent}>
+        <ScrollView
+          style={styles.content}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={COLORS.primary} />
+          }
+          showsVerticalScrollIndicator={false}
+        >
+          {/* Progress Chart */}
+          <View style={styles.chartContainer}>
+            <Text style={styles.sectionTitle}>Progress Timeline</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+              <BarChart
+                data={getChartData()}
+                width={Math.max(width - 64, getChartData().length * 40)}
+                height={120}
+                barWidth={24}
+                barBorderRadius={4}
+                frontColor={COLORS.primary}
+                backgroundColor={COLORS.backgroundCard}
+                yAxisThickness={0}
+                xAxisThickness={1}
+                xAxisColor={COLORS.border}
+                xAxisLabelTextStyle={{ color: COLORS.textMuted, fontSize: 10 }}
+                noOfSections={4}
+                maxValue={100}
+                hideYAxisText
+                disablePress={contentBlurred}
+                onPress={(item: any, index: number) => !contentBlurred && setSelectedDay(index + 1)}
+              />
+            </ScrollView>
           </View>
-          <TouchableOpacity
-            style={styles.daySelectorButton}
-            onPress={() => setSelectedDay(Math.min(skill.duration_days, selectedDay + 1))}
-            disabled={selectedDay >= skill.duration_days}
-          >
-            <Ionicons name="chevron-forward" size={24} color={selectedDay >= skill.duration_days ? COLORS.textMuted : COLORS.textPrimary} />
-          </TouchableOpacity>
-        </View>
 
-        {/* Tabs */}
-        <View style={styles.tabs}>
-          <TouchableOpacity
-            style={[styles.tab, activeTab === 'tasks' && styles.tabActive]}
-            onPress={() => setActiveTab('tasks')}
-          >
-            <Text style={[styles.tabText, activeTab === 'tasks' && styles.tabTextActive]}>Tasks</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.tab, activeTab === 'resources' && styles.tabActive]}
-            onPress={() => setActiveTab('resources')}
-          >
-            <Text style={[styles.tabText, activeTab === 'resources' && styles.tabTextActive]}>Resources</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.tab, activeTab === 'milestones' && styles.tabActive]}
-            onPress={() => setActiveTab('milestones')}
-          >
-            <Text style={[styles.tabText, activeTab === 'milestones' && styles.tabTextActive]}>Milestones</Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* Tab Content */}
-        <View style={styles.tabContent}>
-          {activeTab === 'tasks' && (
-            <View>
-              {currentDayPlan?.tasks && currentDayPlan.tasks.length > 0 ? (
-                currentDayPlan.tasks.map((task) => (
-                  <TaskItem
-                    key={task.id}
-                    task={task}
-                    onToggle={() => handleTaskToggle(task.id)}
-                  />
-                ))
-              ) : (
-                <View style={styles.emptyState}>
-                  <Ionicons name="calendar-outline" size={48} color={COLORS.textMuted} />
-                  <Text style={styles.emptyText}>No tasks for this day</Text>
-                </View>
-              )}
+          {/* Day Selector */}
+          <View style={styles.daySelector}>
+            <TouchableOpacity
+              style={styles.daySelectorButton}
+              onPress={() => !contentBlurred && setSelectedDay(Math.max(1, selectedDay - 1))}
+              disabled={selectedDay <= 1 || contentBlurred}
+            >
+              <Ionicons name="chevron-back" size={24} color={selectedDay <= 1 ? COLORS.textMuted : COLORS.textPrimary} />
+            </TouchableOpacity>
+            <View style={styles.dayInfo}>
+              <Text style={styles.dayNumber}>Day {selectedDay}</Text>
+              <Text style={styles.dayDate}>
+                {format(addDays(startDate, selectedDay - 1), 'MMM d, yyyy')}
+              </Text>
             </View>
-          )}
+            <TouchableOpacity
+              style={styles.daySelectorButton}
+              onPress={() => !contentBlurred && setSelectedDay(Math.min(skill.duration_days, selectedDay + 1))}
+              disabled={selectedDay >= skill.duration_days || contentBlurred}
+            >
+              <Ionicons name="chevron-forward" size={24} color={selectedDay >= skill.duration_days ? COLORS.textMuted : COLORS.textPrimary} />
+            </TouchableOpacity>
+          </View>
 
-          {activeTab === 'resources' && (
-            <View>
-              {skill.roadmap?.resources && skill.roadmap.resources.length > 0 ? (
-                skill.roadmap.resources.map((resource) => (
-                  <TouchableOpacity key={resource.id} style={styles.resourceItem}>
-                    <View style={styles.resourceIcon}>
-                      <Ionicons
-                        name={resource.type === 'youtube' ? 'logo-youtube' : 'document-text-outline'}
-                        size={24}
-                        color={resource.type === 'youtube' ? '#FF0000' : COLORS.primary}
-                      />
-                    </View>
-                    <View style={styles.resourceContent}>
-                      <Text style={styles.resourceTitle}>{resource.title}</Text>
-                      <Text style={styles.resourceDesc} numberOfLines={2}>{resource.description}</Text>
-                    </View>
-                    <Ionicons name="open-outline" size={20} color={COLORS.textMuted} />
-                  </TouchableOpacity>
-                ))
-              ) : (
-                <View style={styles.emptyState}>
-                  <Ionicons name="book-outline" size={48} color={COLORS.textMuted} />
-                  <Text style={styles.emptyText}>No resources available</Text>
-                </View>
-              )}
-            </View>
-          )}
+          {/* Tabs */}
+          <View style={styles.tabs}>
+            <TouchableOpacity
+              style={[styles.tab, activeTab === 'tasks' && styles.tabActive]}
+              onPress={() => setActiveTab('tasks')}
+            >
+              <Text style={[styles.tabText, activeTab === 'tasks' && styles.tabTextActive]}>Tasks</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.tab, activeTab === 'resources' && styles.tabActive]}
+              onPress={() => setActiveTab('resources')}
+            >
+              <Text style={[styles.tabText, activeTab === 'resources' && styles.tabTextActive]}>Resources</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.tab, activeTab === 'milestones' && styles.tabActive]}
+              onPress={() => setActiveTab('milestones')}
+            >
+              <Text style={[styles.tabText, activeTab === 'milestones' && styles.tabTextActive]}>Milestones</Text>
+            </TouchableOpacity>
+          </View>
 
-          {activeTab === 'milestones' && (
-            <View>
-              {skill.roadmap?.milestones && skill.roadmap.milestones.length > 0 ? (
-                skill.roadmap.milestones.map((milestone, index) => (
-                  <View key={index} style={styles.milestoneItem}>
-                    <View style={[
-                      styles.milestoneMarker,
-                      currentDay >= milestone.day && styles.milestoneMarkerCompleted
-                    ]}>
-                      {currentDay >= milestone.day ? (
-                        <Ionicons name="checkmark" size={16} color={COLORS.textPrimary} />
-                      ) : (
-                        <Text style={styles.milestoneDay}>{milestone.day}</Text>
-                      )}
-                    </View>
-                    <View style={styles.milestoneContent}>
-                      <Text style={styles.milestoneTitle}>{milestone.title}</Text>
-                      <Text style={styles.milestoneDesc}>{milestone.description}</Text>
-                      <Text style={styles.milestoneDate}>Day {milestone.day}</Text>
-                    </View>
+          {/* Tab Content */}
+          <View style={styles.tabContent}>
+            {activeTab === 'tasks' && (
+              <View>
+                {currentDayPlan?.tasks && currentDayPlan.tasks.length > 0 ? (
+                  currentDayPlan.tasks.map((task) => (
+                    <TaskItem
+                      key={task.id}
+                      task={task}
+                      onToggle={() => handleTaskToggle(task.id)}
+                    />
+                  ))
+                ) : (
+                  <View style={styles.emptyState}>
+                    <Ionicons name="calendar-outline" size={48} color={COLORS.textMuted} />
+                    <Text style={styles.emptyText}>No tasks for this day</Text>
                   </View>
-                ))
-              ) : (
-                <View style={styles.emptyState}>
-                  <Ionicons name="flag-outline" size={48} color={COLORS.textMuted} />
-                  <Text style={styles.emptyText}>No milestones set</Text>
-                </View>
-              )}
+                )}
+              </View>
+            )}
+
+            {activeTab === 'resources' && (
+              <View>
+                {skill.roadmap?.resources && skill.roadmap.resources.length > 0 ? (
+                  skill.roadmap.resources.map((resource) => (
+                    <TouchableOpacity key={resource.id} style={styles.resourceItem} disabled={contentBlurred}>
+                      <View style={styles.resourceIcon}>
+                        <Ionicons
+                          name={resource.type === 'youtube' ? 'logo-youtube' : 'document-text-outline'}
+                          size={24}
+                          color={resource.type === 'youtube' ? '#FF0000' : COLORS.primary}
+                        />
+                      </View>
+                      <View style={styles.resourceContent}>
+                        <Text style={styles.resourceTitle}>{resource.title}</Text>
+                        <Text style={styles.resourceDesc} numberOfLines={2}>{resource.description}</Text>
+                      </View>
+                      <Ionicons name="open-outline" size={20} color={COLORS.textMuted} />
+                    </TouchableOpacity>
+                  ))
+                ) : (
+                  <View style={styles.emptyState}>
+                    <Ionicons name="book-outline" size={48} color={COLORS.textMuted} />
+                    <Text style={styles.emptyText}>No resources available</Text>
+                  </View>
+                )}
+              </View>
+            )}
+
+            {activeTab === 'milestones' && (
+              <View>
+                {skill.roadmap?.milestones && skill.roadmap.milestones.length > 0 ? (
+                  skill.roadmap.milestones.map((milestone, index) => (
+                    <View key={index} style={styles.milestoneItem}>
+                      <View style={[
+                        styles.milestoneMarker,
+                        currentDay >= milestone.day && styles.milestoneMarkerCompleted
+                      ]}>
+                        {currentDay >= milestone.day ? (
+                          <Ionicons name="checkmark" size={16} color={COLORS.textPrimary} />
+                        ) : (
+                          <Text style={styles.milestoneDay}>{milestone.day}</Text>
+                        )}
+                      </View>
+                      <View style={styles.milestoneContent}>
+                        <Text style={styles.milestoneTitle}>{milestone.title}</Text>
+                        <Text style={styles.milestoneDesc}>{milestone.description}</Text>
+                        <Text style={styles.milestoneDate}>Day {milestone.day}</Text>
+                      </View>
+                    </View>
+                  ))
+                ) : (
+                  <View style={styles.emptyState}>
+                    <Ionicons name="flag-outline" size={48} color={COLORS.textMuted} />
+                    <Text style={styles.emptyText}>No milestones set</Text>
+                  </View>
+                )}
+              </View>
+            )}
+          </View>
+
+          {/* Overview Card */}
+          {skill.roadmap?.overview && (
+            <View style={styles.overviewCard}>
+              <Text style={styles.overviewTitle}>Learning Overview</Text>
+              <Text style={styles.overviewText}>{skill.roadmap.overview}</Text>
             </View>
           )}
-        </View>
+        </ScrollView>
 
-        {/* Overview Card */}
-        {skill.roadmap?.overview && (
-          <View style={styles.overviewCard}>
-            <Text style={styles.overviewTitle}>Learning Overview</Text>
-            <Text style={styles.overviewText}>{skill.roadmap.overview}</Text>
-          </View>
+        {/* Blur Overlay when payment required */}
+        {contentBlurred && (
+          <BlurView
+            intensity={20}
+            style={styles.blurOverlay}
+            tint="dark"
+          />
         )}
-      </ScrollView>
+      </View>
+
+      {/* Paywall Modal */}
+      <PaywallOverlay
+        visible={showPaywall}
+        onSuccess={handlePaywallSuccess}
+        isFirstSkill={isFirstSkill}
+      />
     </SafeAreaView>
   );
 }
@@ -336,6 +430,7 @@ const styles = StyleSheet.create({
     paddingVertical: SPACING.md,
     borderBottomWidth: 1,
     borderBottomColor: COLORS.border,
+    zIndex: 10,
   },
   backButton: {
     width: 40,
@@ -358,9 +453,17 @@ const styles = StyleSheet.create({
     fontSize: FONTS.size.sm,
     color: COLORS.textSecondary,
   },
+  mainContent: {
+    flex: 1,
+    position: 'relative',
+  },
   content: {
     flex: 1,
     paddingHorizontal: SPACING.lg,
+  },
+  blurOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 5,
   },
   chartContainer: {
     marginTop: SPACING.lg,
