@@ -262,13 +262,17 @@ export default function OnboardingStep() {
           finalProfile.coach_style_preference || 'adaptive'
         );
 
-        // Navigate to home
-        router.replace('/(tabs)/home');
+        // Navigate to home with small delay to ensure router is mounted
+        setTimeout(() => {
+          router.replace('/(tabs)/home');
+        }, 100);
       } catch (error) {
         console.error('Error completing onboarding:', error);
         setIsSubmitting(false);
         // Still navigate to home on error (will be guest user)
-        router.replace('/(tabs)/home');
+        setTimeout(() => {
+          router.replace('/(tabs)/home');
+        }, 100);
       }
     }
   };
