@@ -10,7 +10,7 @@ from typing import List, Optional, Dict, Any
 import uuid
 from datetime import datetime, timedelta
 import json
-import google.generativeai as genai
+from emergentintegrations.llm.chat import LlmChat, UserMessage
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -20,10 +20,8 @@ mongo_url = os.environ['MONGO_URL']
 client = AsyncIOMotorClient(mongo_url)
 db = client[os.environ.get('DB_NAME', 'skillgpt_db')]
 
-# Configure Gemini
+# Get Emergent LLM Key
 EMERGENT_LLM_KEY = os.environ.get('EMERGENT_LLM_KEY', '')
-if EMERGENT_LLM_KEY:
-    genai.configure(api_key=EMERGENT_LLM_KEY)
 
 # Create the main app
 app = FastAPI(title="SkillGPT API")
