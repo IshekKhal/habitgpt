@@ -467,34 +467,177 @@ CREATE TRIGGER update_notification_preferences_updated_at
 
 ## RevenueCat Setup
 
+SkillGPT uses RevenueCat for subscription management with a **free trial** model.
+
+### Pricing Model
+
+| Plan | Price | Trial | Auto-Renew |
+|------|-------|-------|------------|
+| **Monthly** | $19.99/month | First month FREE | Yes |
+| **Yearly** | $159.99/year | First month FREE | Yes |
+
+### Payment Flow
+
+1. User creates a skill roadmap
+2. Roadmap screen shows **blurred content** with paywall overlay
+3. User selects Monthly or Yearly plan
+4. First payment is **$0** (free trial)
+5. After 30 days, auto-pay charges the selected amount
+6. If payment fails, content is blurred again until resolved
+
 ### Step 1: Create RevenueCat Account
 
 1. Go to https://app.revenuecat.com/
-2. Sign up and create a new project
+2. Sign up and create a new project named "SkillGPT"
+3. Note your **Project ID**
 
-### Step 2: Configure App Store Connect (iOS)
+### Step 2: Create Products in App Store Connect (iOS)
 
-1. In App Store Connect, create your subscription products
-2. Add products in RevenueCat under **Products**
-3. Configure entitlements
+1. Go to **App Store Connect** > **My Apps** > Your App
+2. Navigate to **Subscriptions**
+3. Create a **Subscription Group** called "SkillGPT Premium"
+4. Add subscriptions:
 
-### Step 3: Configure Google Play Console (Android)
+**Monthly Subscription:**
+- Reference Name: SkillGPT Monthly
+- Product ID: `skillgpt_monthly_1999`
+- Duration: 1 Month
+- Price: $19.99
+- Introductory Offer: Free Trial, 1 Month
 
-1. In Google Play Console, create your subscription products
-2. Link to RevenueCat
-3. Configure entitlements
+**Yearly Subscription:**
+- Reference Name: SkillGPT Yearly
+- Product ID: `skillgpt_yearly_15999`
+- Duration: 1 Year
+- Price: $159.99
+- Introductory Offer: Free Trial, 1 Month
 
-### Step 4: Get API Keys
+### Step 3: Create Products in Google Play Console (Android)
+
+1. Go to **Google Play Console** > Your App
+2. Navigate to **Monetization** > **Subscriptions**
+3. Create subscriptions:
+
+**Monthly:**
+- Product ID: `skillgpt_monthly_1999`
+- Billing Period: Monthly
+- Price: $19.99
+- Free Trial: 30 days
+
+**Yearly:**
+- Product ID: `skillgpt_yearly_15999`
+- Billing Period: Yearly
+- Price: $159.99
+- Free Trial: 30 days
+
+### Step 4: Configure RevenueCat Products
+
+1. In RevenueCat Dashboard, go to **Products**
+2. Add both App Store and Play Store products
+3. Create an **Entitlement** called `premium`
+4. Attach both products to this entitlement
+
+### Step 5: Create Offerings
+
+1. Go to **Offerings** in RevenueCat
+2. Create a **Default Offering** with:
+   - Monthly package → `skillgpt_monthly_1999`
+   - Annual package → `skillgpt_yearly_15999`
+
+### Step 6: Get API Keys
 
 1. Go to **Project Settings** > **API Keys**
-2. Copy the public SDK key for your app
+2. Copy:
+   - **iOS Public Key** (starts with `appl_`)
+   - **Android Public Key** (starts with `goog_`)
 
-### Products to Create:
+### Step 7: Configure Webhooks
 
-| Product ID | Name | Price | Duration |
-|------------|------|-------|----------|
-| `skillgpt_monthly` | Monthly Subscription | $19.99 | 1 month |
-| `skillgpt_yearly` | Yearly Subscription | $149.99 | 1 year |
+1. Go to **Project Settings** > **Integrations** > **Webhooks**
+2. Add webhook URL: `https://your-backend.com/api/webhooks/revenuecat`
+3. Enable events:
+   - `INITIAL_PURCHASE`
+   - `RENEWAL`
+   - `CANCELLATION`
+   - `EXPIRATION`
+   - `BILLING_ISSUE`
+   - `PRODUCT_CHANGE`
+
+### Step 8: Update Environment Variables
+
+**Backend `/app/backend/.env`:**
+```env
+REVENUECAT_WEBHOOK_SECRET="your-webhook-secret"
+```
+
+**Frontend `/app/frontend/.env`:**
+```env
+EXPO_PUBLIC_REVENUECAT_IOS_KEY="appl_your_ios_key"
+EXPO_PUBLIC_REVENUECAT_ANDROID_KEY="goog_your_android_key"
+```
+
+### Backend Subscription APIs
+
+```
+GET /api/users/{user_id}/subscription
+  Returns current subscription status
+
+PUT /api/users/{user_id}/subscription
+  Updates subscription status (called from app after purchase)
+
+POST /api/webhooks/revenuecat
+  Handles RevenueCat webhook events for real-time updates
+```
+
+### Subscription Flow Diagram
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    SUBSCRIPTION FLOW                         │
+├─────────────────────────────────────────────────────────────┤
+│                                                              │
+│  1. User creates skill → Roadmap generated                  │
+│                     │                                        │
+│                     ▼                                        │
+│  2. Roadmap screen BLURRED + Paywall overlay                │
+│                     │                                        │
+│                     ▼                                        │
+│  3. User selects plan (Monthly $19.99 / Yearly $159.99)     │
+│                     │                                        │
+│                     ▼                                        │
+│  4. RevenueCat processes payment ($0 for first month)       │
+│                     │                                        │
+│         ┌──────────┴──────────┐                             │
+│         ▼                     ▼                             │
+│    SUCCESS               CANCELLED                          │
+│         │                     │                             │
+│         ▼                     ▼                             │
+│  5a. Blur removed       5b. Stay blurred                    │
+│      User can learn         Return to paywall               │
+│                                                              │
+│  6. After 30 days → Auto-charge                             │
+│                     │                                        │
+│         ┌──────────┴──────────┐                             │
+│         ▼                     ▼                             │
+│    PAYMENT OK           PAYMENT FAILED                      │
+│         │                     │                             │
+│         ▼                     ▼                             │
+│  Continue access        Content BLURRED                     │
+│                         Show payment prompt                 │
+│                                                              │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### Testing Subscriptions
+
+**Sandbox Testing (iOS):**
+1. Create Sandbox Tester in App Store Connect
+2. Sign out of App Store on device
+3. Use sandbox account when prompted
+
+**Test Environment (Android):**
+1. Add test accounts in Google Play Console
+2. License testing returns success for any card
 
 ---
 
