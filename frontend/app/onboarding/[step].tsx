@@ -209,7 +209,7 @@ export default function OnboardingStep() {
 
     if (currentStep < QUESTIONS.length) {
       // Go to next question
-      router.replace(`/onboarding/${currentStep + 1}`);
+      router.push(`/onboarding/${currentStep + 1}`);
     } else {
       // Final step - create user and profile
       setIsSubmitting(true);
