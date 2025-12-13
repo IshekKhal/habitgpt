@@ -1,129 +1,187 @@
 import axios from 'axios';
-import { OnboardingProfile, User, HabitInstance, ChatMessage } from '../store/useStore';
+import { User, OnboardingProfile, HabitInstance, ChatMessage } from '../store/useStore';
 
 const API_URL = process.env.EXPO_PUBLIC_BACKEND_URL || '';
 
 const api = axios.create({
-  baseURL: `${API_URL}/api`,
+  baseURL: API_URL,
+  timeout: 60000, // 60 seconds for AI operations
   headers: {
     'Content-Type': 'application/json',
   },
 });
 
-// User APIs
+// ==================== USER API ====================
+
 export const createUser = async (userData: {
   email: string;
   name: string;
   google_id?: string;
   avatar_url?: string;
 }): Promise<User> => {
-  const response = await api.post('/users', userData);
+  const response = await api.post('/api/users', userData);
   return response.data;
 };
 
 export const getUser = async (userId: string): Promise<User> => {
-  const response = await api.get(`/users/${userId}`);
+  const response = await api.get(`/api/users/${userId}`);
   return response.data;
 };
 
-export const getUserByEmail = async (email: string): Promise<User> => {
-  const response = await api.get(`/users/email/${email}`);
+export const getUserByEmail = async (email: string): Promise<User | null> => {
+  try {
+    const response = await api.get(`/api/users/email/${email}`);
+    return response.data;
+  } catch (error: any) {
+    if (error.response?.status === 404) {
+      return null;
+    }
+    throw error;
+  }
+};
+
+export const updateUser = async (
+  userId: string,
+  updates: Partial<User>
+): Promise<User> => {
+  const response = await api.put(`/api/users/${userId}`, updates);
   return response.data;
 };
 
-export const updateUser = async (userId: string, updates: Partial<User>): Promise<User> => {
-  const response = await api.put(`/users/${userId}`, updates);
+// ==================== ONBOARDING API ====================
+
+export const createOnboardingProfile = async (
+  profile: Omit<OnboardingProfile, 'id' | 'user_id' | 'created_at'>
+): Promise<OnboardingProfile> => {
+  const response = await api.post('/api/onboarding', profile);
   return response.data;
 };
 
-// Onboarding APIs
-export const createOnboardingProfile = async (profile: Omit<OnboardingProfile, 'id'>): Promise<OnboardingProfile> => {
-  const response = await api.post('/onboarding', profile);
+export const getOnboardingProfile = async (
+  profileId: string
+): Promise<OnboardingProfile> => {
+  const response = await api.get(`/api/onboarding/${profileId}`);
   return response.data;
 };
 
-export const getOnboardingProfile = async (profileId: string): Promise<OnboardingProfile> => {
-  const response = await api.get(`/onboarding/${profileId}`);
-  return response.data;
+export const getOnboardingProfileByUser = async (
+  userId: string
+): Promise<OnboardingProfile | null> => {
+  try {
+    const response = await api.get(`/api/onboarding/user/${userId}`);
+    return response.data;
+  } catch (error: any) {
+    if (error.response?.status === 404) {
+      return null;
+    }
+    throw error;
+  }
 };
 
-export const linkOnboardingToUser = async (profileId: string, userId: string): Promise<void> => {
-  await api.put(`/onboarding/${profileId}/link-user?user_id=${userId}`);
+export const linkOnboardingToUser = async (
+  profileId: string,
+  userId: string
+): Promise<void> => {
+  await api.put(`/api/onboarding/${profileId}/link-user?user_id=${userId}`);
 };
 
-// Habit Chat APIs
+// ==================== HABIT CHAT API ====================
+
 export const sendHabitChatMessage = async (
   userId: string,
   message: string,
-  chatHistory: ChatMessage[],
-  habitInstanceId?: string
+  chatHistory: ChatMessage[]
 ): Promise<{
   response: string;
   ready_for_roadmap: boolean;
   habit_name?: string;
   category?: string;
 }> => {
-  const response = await api.post('/habits/chat', {
+  const response = await api.post('/api/habits/chat', {
     user_id: userId,
     message,
     chat_history: chatHistory,
-    habit_instance_id: habitInstanceId,
   });
   return response.data;
 };
 
-// Habit Instance APIs
-export const createHabitInstance = async (habitData: {
+// ==================== HABIT INSTANCE API ====================
+
+export const createHabitInstance = async (data: {
   user_id: string;
   habit_name: string;
   habit_description: string;
   category: string;
   duration_days?: number;
 }): Promise<HabitInstance> => {
-  const response = await api.post('/habits/instances', habitData);
-  return response.data;
-};
-
-export const getUserHabitInstances = async (userId: string): Promise<HabitInstance[]> => {
-  const response = await api.get(`/habits/instances/user/${userId}`);
-  return response.data;
-};
-
-export const getHabitInstance = async (instanceId: string): Promise<HabitInstance> => {
-  const response = await api.get(`/habits/instances/${instanceId}`);
-  return response.data;
-};
-
-export const deleteHabitInstance = async (instanceId: string): Promise<void> => {
-  await api.delete(`/habits/instances/${instanceId}`);
-};
-
-// Task APIs
-export const completeTask = async (
-  instanceId: string,
-  taskId: string,
-  dayNumber: number
-): Promise<{ completion_percentage: number; current_streak: number }> => {
-  const response = await api.put(`/habits/instances/${instanceId}/tasks/complete`, {
-    task_id: taskId,
-    day_number: dayNumber,
+  const response = await api.post('/api/habits/instances', {
+    ...data,
+    duration_days: data.duration_days || 29,
   });
   return response.data;
 };
 
-export const getDailyTasks = async (instanceId: string, dayNumber: number) => {
-  const response = await api.get(`/habits/instances/${instanceId}/daily-tasks/${dayNumber}`);
+export const getUserHabitInstances = async (
+  userId: string
+): Promise<HabitInstance[]> => {
+  const response = await api.get(`/api/habits/instances/user/${userId}`);
   return response.data;
 };
 
-// Trial APIs
-export const startTrial = async (userId: string): Promise<{ trial_end_date: string }> => {
-  const response = await api.post(`/users/${userId}/start-trial`);
+export const getHabitInstance = async (
+  instanceId: string
+): Promise<HabitInstance> => {
+  const response = await api.get(`/api/habits/instances/${instanceId}`);
   return response.data;
 };
 
-// Subscription APIs
-export const checkSubscriptionStatus = async (userId: string): Promise<{
+export const deleteHabitInstance = async (
+  instanceId: string
+): Promise<void> => {
+  await api.delete(`/api/habits/instances/${instanceId}`);
+};
+
+// ==================== TASK API ====================
+
+export const completeTask = async (
+  instanceId: string,
+  taskId: string,
+  dayNumber: number
+): Promise<{
+  status: string;
+  completion_percentage: number;
+  current_streak: number;
+  longest_streak: number;
+}> => {
+  const response = await api.put(
+    `/api/habits/instances/${instanceId}/tasks/complete`,
+    {
+      task_id: taskId,
+      day_number: dayNumber,
+    }
+  );
+  return response.data;
+};
+
+export const getDailyTasks = async (
+  instanceId: string,
+  dayNumber: number
+): Promise<any> => {
+  const response = await api.get(
+    `/api/habits/instances/${instanceId}/daily-tasks/${dayNumber}`
+  );
+  return response.data;
+};
+
+// ==================== TRIAL & SUBSCRIPTION API ====================
+
+export const startTrial = async (userId: string): Promise<void> => {
+  await api.post(`/api/users/${userId}/start-trial`);
+};
+
+export const checkSubscriptionStatus = async (
+  userId: string
+): Promise<{
   is_subscribed: boolean;
   is_trial_active: boolean;
   trial_end_date?: string;
@@ -131,7 +189,7 @@ export const checkSubscriptionStatus = async (userId: string): Promise<{
   product_id?: string;
   will_renew: boolean;
 }> => {
-  const response = await api.get(`/users/${userId}/subscription`);
+  const response = await api.get(`/api/users/${userId}/subscription`);
   return response.data;
 };
 
@@ -146,7 +204,82 @@ export const updateSubscriptionStatus = async (
     will_renew?: boolean;
   }
 ): Promise<void> => {
-  await api.put(`/users/${userId}/subscription`, status);
+  await api.put(`/api/users/${userId}/subscription`, status);
 };
 
-export default api;
+// ==================== NOTIFICATION API ====================
+
+export const registerPushToken = async (
+  userId: string,
+  pushToken: string,
+  platform: string
+): Promise<void> => {
+  await api.post('/api/notifications/register', {
+    user_id: userId,
+    push_token: pushToken,
+    platform,
+  });
+};
+
+export const getNotificationPreferences = async (
+  userId: string
+): Promise<any> => {
+  const response = await api.get(`/api/notifications/preferences/${userId}`);
+  return response.data;
+};
+
+export const updateNotificationPreferences = async (
+  userId: string,
+  prefs: {
+    daily_reminders?: boolean;
+    morning_time?: string;
+    afternoon_time?: string;
+    evening_time?: string;
+    milestone_alerts?: boolean;
+    streak_notifications?: boolean;
+  }
+): Promise<void> => {
+  await api.put(`/api/notifications/preferences/${userId}`, prefs);
+};
+
+export const getPendingTasksCount = async (
+  userId: string
+): Promise<{
+  total_pending: number;
+  habits: Array<{
+    habit_name: string;
+    pending_tasks: number;
+    current_streak: number;
+  }>;
+}> => {
+  const response = await api.get(`/api/notifications/pending-tasks/${userId}`);
+  return response.data;
+};
+
+export const getCoachMessages = async (
+  userId: string
+): Promise<{
+  coach_style: string;
+  messages: {
+    name: string;
+    morning_notification: string;
+    afternoon_notification: string;
+    evening_notification: string;
+    missed_day_message: string;
+    streak_broken_message: string;
+  };
+}> => {
+  const response = await api.get(`/api/notifications/coach-messages/${userId}`);
+  return response.data;
+};
+
+// ==================== HEALTH CHECK ====================
+
+export const healthCheck = async (): Promise<boolean> => {
+  try {
+    const response = await api.get('/api/health');
+    return response.status === 200;
+  } catch {
+    return false;
+  }
+};

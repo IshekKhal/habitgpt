@@ -1,16 +1,7 @@
 import { create } from 'zustand';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-export interface OnboardingProfile {
-  id?: string;
-  primary_change_domain: string;
-  failure_patterns: string[];
-  baseline_consistency_level: string;
-  primary_obstacle: string;
-  max_daily_effort_minutes: number;
-  miss_response_type: string;
-  coach_style_preference: string;
-}
+// ==================== TYPE DEFINITIONS ====================
 
 export interface User {
   id: string;
@@ -23,6 +14,25 @@ export interface User {
   trial_started: boolean;
   trial_start_date?: string;
   subscription_active: boolean;
+  created_at?: string;
+}
+
+export interface OnboardingProfile {
+  id?: string;
+  user_id?: string;
+  primary_change_domain: string;  // sleep_energy, focus_productivity, etc.
+  failure_patterns: string[];     // mornings, evenings, weekends, etc.
+  baseline_consistency_level: string;  // very_inconsistent, somewhat_inconsistent, etc.
+  primary_obstacle: string;       // lack_motivation, forgetting, etc.
+  max_daily_effort_minutes: number;  // 5, 10, 20, 30
+  miss_response_type: string;     // guilty_give_up, try_again, ignore_drift, depends
+  coach_style_preference: string; // gentle, structured, strict, adaptive
+  created_at?: string;
+}
+
+export interface ChatMessage {
+  role: 'user' | 'assistant';
+  content: string;
 }
 
 export interface DailyTask {
@@ -44,20 +54,22 @@ export interface DayPlan {
 
 export interface Resource {
   id: string;
-  type: string;
+  type: string;  // youtube, article, document
   title: string;
   url: string;
+  description: string;
+}
+
+export interface Milestone {
+  day: number;
+  title: string;
   description: string;
 }
 
 export interface HabitRoadmap {
   overview: string;
   total_days: number;
-  milestones: Array<{
-    day: number;
-    title: string;
-    description: string;
-  }>;
+  milestones: Milestone[];
   day_plans: DayPlan[];
   resources: Resource[];
 }
@@ -71,16 +83,14 @@ export interface HabitInstance {
   duration_days: number;
   start_date: string;
   end_date?: string;
-  status: string;
+  status: string;  // active, completed, paused
   completion_percentage: number;
   current_streak: number;
   longest_streak: number;
+  last_completed_date?: string;
   roadmap?: HabitRoadmap;
-}
-
-export interface ChatMessage {
-  role: 'user' | 'assistant';
-  content: string;
+  chat_history: ChatMessage[];
+  created_at: string;
 }
 
 export interface SubscriptionStatus {
@@ -92,90 +102,113 @@ export interface SubscriptionStatus {
   willRenew: boolean;
 }
 
-interface AppState {
+export interface PendingHabit {
+  name: string;
+  category: string;
+}
+
+// ==================== STORE INTERFACE ====================
+
+interface HabitGPTStore {
   // User state
   user: User | null;
   setUser: (user: User | null) => void;
-  
-  // Subscription state
-  subscriptionStatus: SubscriptionStatus;
-  setSubscriptionStatus: (status: SubscriptionStatus) => void;
-  
+
   // Onboarding state
-  onboardingProfile: OnboardingProfile | null;
-  setOnboardingProfile: (profile: OnboardingProfile | null) => void;
   onboardingStep: number;
+  onboardingProfile: OnboardingProfile | null;
   setOnboardingStep: (step: number) => void;
-  onboardingAnswers: Record<string, any>;
-  setOnboardingAnswer: (key: string, value: any) => void;
+  setOnboardingProfile: (profile: OnboardingProfile | null) => void;
+  updateOnboardingProfile: (updates: Partial<OnboardingProfile>) => void;
   resetOnboarding: () => void;
-  
-  // Habits state
-  habitInstances: HabitInstance[];
-  setHabitInstances: (instances: HabitInstance[]) => void;
-  addHabitInstance: (instance: HabitInstance) => void;
-  removeHabitInstance: (instanceId: string) => void;
-  updateHabitInstance: (instanceId: string, updates: Partial<HabitInstance>) => void;
-  
+
   // Chat state
   currentChatHistory: ChatMessage[];
   addChatMessage: (message: ChatMessage) => void;
   clearChatHistory: () => void;
-  
-  // Pending habit from chat
-  pendingHabit: { name: string; category: string } | null;
-  setPendingHabit: (habit: { name: string; category: string } | null) => void;
-  
-  // Loading states
-  isLoading: boolean;
-  setIsLoading: (loading: boolean) => void;
-  
+
+  // Pending habit (from chat, before payment)
+  pendingHabit: PendingHabit | null;
+  setPendingHabit: (habit: PendingHabit | null) => void;
+
+  // Habit instances
+  habitInstances: HabitInstance[];
+  setHabitInstances: (instances: HabitInstance[]) => void;
+  addHabitInstance: (instance: HabitInstance) => void;
+  updateHabitInstance: (id: string, updates: Partial<HabitInstance>) => void;
+  removeHabitInstance: (id: string) => void;
+
+  // Subscription status
+  subscriptionStatus: SubscriptionStatus;
+  setSubscriptionStatus: (status: Partial<SubscriptionStatus>) => void;
+
   // Persistence
   loadFromStorage: () => Promise<void>;
   saveToStorage: () => Promise<void>;
 }
 
-export const useStore = create<AppState>((set, get) => ({
+// ==================== INITIAL STATE ====================
+
+const initialOnboardingProfile: OnboardingProfile = {
+  primary_change_domain: '',
+  failure_patterns: [],
+  baseline_consistency_level: '',
+  primary_obstacle: '',
+  max_daily_effort_minutes: 10,
+  miss_response_type: '',
+  coach_style_preference: 'adaptive',
+};
+
+const initialSubscriptionStatus: SubscriptionStatus = {
+  isSubscribed: false,
+  isTrialActive: false,
+  willRenew: false,
+};
+
+// ==================== STORE IMPLEMENTATION ====================
+
+export const useStore = create<HabitGPTStore>((set, get) => ({
   // User state
   user: null,
   setUser: (user) => {
     set({ user });
     get().saveToStorage();
   },
-  
-  // Subscription state
-  subscriptionStatus: {
-    isSubscribed: false,
-    isTrialActive: false,
-    willRenew: false,
-  },
-  setSubscriptionStatus: (status) => {
-    set({ subscriptionStatus: status });
-    get().saveToStorage();
-  },
-  
+
   // Onboarding state
+  onboardingStep: 1,
   onboardingProfile: null,
+  setOnboardingStep: (step) => set({ onboardingStep: step }),
   setOnboardingProfile: (profile) => {
     set({ onboardingProfile: profile });
     get().saveToStorage();
   },
-  onboardingStep: 1,
-  setOnboardingStep: (step) => set({ onboardingStep: step }),
-  onboardingAnswers: {},
-  setOnboardingAnswer: (key, value) => {
-    set((state) => ({
-      onboardingAnswers: { ...state.onboardingAnswers, [key]: value },
-    }));
+  updateOnboardingProfile: (updates) => {
+    const current = get().onboardingProfile || { ...initialOnboardingProfile };
+    const updated = { ...current, ...updates };
+    set({ onboardingProfile: updated });
   },
   resetOnboarding: () => {
     set({
       onboardingStep: 1,
-      onboardingAnswers: {},
+      onboardingProfile: null,
     });
   },
-  
-  // Habits state
+
+  // Chat state
+  currentChatHistory: [],
+  addChatMessage: (message) => {
+    set((state) => ({
+      currentChatHistory: [...state.currentChatHistory, message],
+    }));
+  },
+  clearChatHistory: () => set({ currentChatHistory: [] }),
+
+  // Pending habit
+  pendingHabit: null,
+  setPendingHabit: (habit) => set({ pendingHabit: habit }),
+
+  // Habit instances
   habitInstances: [],
   setHabitInstances: (instances) => {
     set({ habitInstances: instances });
@@ -187,63 +220,74 @@ export const useStore = create<AppState>((set, get) => ({
     }));
     get().saveToStorage();
   },
-  removeHabitInstance: (instanceId) => {
+  updateHabitInstance: (id, updates) => {
     set((state) => ({
-      habitInstances: state.habitInstances.filter((i) => i.id !== instanceId),
-    }));
-    get().saveToStorage();
-  },
-  updateHabitInstance: (instanceId, updates) => {
-    set((state) => ({
-      habitInstances: state.habitInstances.map((i) =>
-        i.id === instanceId ? { ...i, ...updates } : i
+      habitInstances: state.habitInstances.map((inst) =>
+        inst.id === id ? { ...inst, ...updates } : inst
       ),
     }));
     get().saveToStorage();
   },
-  
-  // Chat state
-  currentChatHistory: [],
-  addChatMessage: (message) => {
+  removeHabitInstance: (id) => {
     set((state) => ({
-      currentChatHistory: [...state.currentChatHistory, message],
+      habitInstances: state.habitInstances.filter((inst) => inst.id !== id),
     }));
+    get().saveToStorage();
   },
-  clearChatHistory: () => set({ currentChatHistory: [] }),
-  
-  // Pending habit
-  pendingHabit: null,
-  setPendingHabit: (habit) => set({ pendingHabit: habit }),
-  
-  // Loading states
-  isLoading: false,
-  setIsLoading: (loading) => set({ isLoading: loading }),
-  
+
+  // Subscription status
+  subscriptionStatus: initialSubscriptionStatus,
+  setSubscriptionStatus: (status) => {
+    set((state) => ({
+      subscriptionStatus: { ...state.subscriptionStatus, ...status },
+    }));
+    get().saveToStorage();
+  },
+
   // Persistence
   loadFromStorage: async () => {
     try {
-      const userData = await AsyncStorage.getItem('habitgpt_user');
-      const profileData = await AsyncStorage.getItem('habitgpt_profile');
-      const habitsData = await AsyncStorage.getItem('habitgpt_habits');
-      const subscriptionData = await AsyncStorage.getItem('habitgpt_subscription');
-      
-      if (userData) set({ user: JSON.parse(userData) });
-      if (profileData) set({ onboardingProfile: JSON.parse(profileData) });
-      if (habitsData) set({ habitInstances: JSON.parse(habitsData) });
-      if (subscriptionData) set({ subscriptionStatus: JSON.parse(subscriptionData) });
+      const [userData, profileData, habitsData, subscriptionData] = await Promise.all([
+        AsyncStorage.getItem('habitgpt_user'),
+        AsyncStorage.getItem('habitgpt_profile'),
+        AsyncStorage.getItem('habitgpt_habits'),
+        AsyncStorage.getItem('habitgpt_subscription'),
+      ]);
+
+      if (userData) {
+        set({ user: JSON.parse(userData) });
+      }
+      if (profileData) {
+        set({ onboardingProfile: JSON.parse(profileData) });
+      }
+      if (habitsData) {
+        set({ habitInstances: JSON.parse(habitsData) });
+      }
+      if (subscriptionData) {
+        set({ subscriptionStatus: JSON.parse(subscriptionData) });
+      }
     } catch (error) {
-      console.error('Failed to load from storage:', error);
+      console.error('Error loading from storage:', error);
     }
   },
+
   saveToStorage: async () => {
     try {
-      const { user, onboardingProfile, habitInstances, subscriptionStatus } = get();
-      if (user) await AsyncStorage.setItem('habitgpt_user', JSON.stringify(user));
-      if (onboardingProfile) await AsyncStorage.setItem('habitgpt_profile', JSON.stringify(onboardingProfile));
-      if (habitInstances.length > 0) await AsyncStorage.setItem('habitgpt_habits', JSON.stringify(habitInstances));
-      if (subscriptionStatus) await AsyncStorage.setItem('habitgpt_subscription', JSON.stringify(subscriptionStatus));
+      const state = get();
+      await Promise.all([
+        state.user
+          ? AsyncStorage.setItem('habitgpt_user', JSON.stringify(state.user))
+          : AsyncStorage.removeItem('habitgpt_user'),
+        state.onboardingProfile
+          ? AsyncStorage.setItem('habitgpt_profile', JSON.stringify(state.onboardingProfile))
+          : AsyncStorage.removeItem('habitgpt_profile'),
+        state.habitInstances.length > 0
+          ? AsyncStorage.setItem('habitgpt_habits', JSON.stringify(state.habitInstances))
+          : AsyncStorage.removeItem('habitgpt_habits'),
+        AsyncStorage.setItem('habitgpt_subscription', JSON.stringify(state.subscriptionStatus)),
+      ]);
     } catch (error) {
-      console.error('Failed to save to storage:', error);
+      console.error('Error saving to storage:', error);
     }
   },
 }));
