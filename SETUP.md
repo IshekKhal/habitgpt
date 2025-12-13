@@ -2,76 +2,80 @@
 
 **Grow any habit in 29 days**
 
-This guide covers the complete setup for HabitGPT, including Supabase, RevenueCat, and Google Authentication.
+This guide covers the complete setup for HabitGPT, including Supabase database, Railway backend deployment, RevenueCat payments, and Expo mobile app.
 
 ---
 
 ## Table of Contents
 
-1. [Environment Variables](#1-environment-variables)
+1. [Architecture Overview](#1-architecture-overview)
 2. [Supabase Setup](#2-supabase-setup)
-3. [RevenueCat Setup](#3-revenuecat-setup)
-4. [Google Authentication](#4-google-authentication)
-5. [Gemini AI Setup](#5-gemini-ai-setup)
-6. [Running the App](#6-running-the-app)
+3. [Railway Backend Deployment](#3-railway-backend-deployment)
+4. [RevenueCat Setup](#4-revenuecat-setup)
+5. [Expo Mobile App Setup](#5-expo-mobile-app-setup)
+6. [Google Authentication](#6-google-authentication)
+7. [Testing](#7-testing)
 
 ---
 
-## 1. Environment Variables
+## 1. Architecture Overview
 
-### Backend (.env)
-
-```env
-# MongoDB (Already configured in container)
-MONGO_URL=mongodb://localhost:27017/habitgpt_db
-DB_NAME=habitgpt_db
-
-# Gemini AI (Required for habit coaching)
-GEMINI_API_KEY=your_gemini_api_key
-
-# RevenueCat Webhook Secret (Optional)
-REVENUECAT_WEBHOOK_SECRET=your_webhook_secret
+```
+┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
+│  Expo Mobile    │────▶│  Railway API    │────▶│    Supabase     │
+│  (React Native) │     │   (FastAPI)     │     │  (PostgreSQL)   │
+└─────────────────┘     └─────────────────┘     └─────────────────┘
+         │                      │
+         │                      │
+         ▼                      ▼
+┌─────────────────┐     ┌─────────────────┐
+│   RevenueCat    │     │   Gemini AI     │
+│   (Payments)    │     │   (Coaching)    │
+└─────────────────┘     └─────────────────┘
 ```
 
-### Frontend (.env)
-
-```env
-# API Configuration
-EXPO_PUBLIC_BACKEND_URL=http://localhost:8001
-
-# Supabase (Optional - for Google Auth)
-EXPO_PUBLIC_SUPABASE_URL=your_supabase_url
-EXPO_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
-
-# Google OAuth Client IDs
-EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID=your_web_client_id
-EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID=your_android_client_id
-EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID=your_ios_client_id
-
-# RevenueCat
-EXPO_PUBLIC_REVENUECAT_IOS_KEY=appl_your_ios_key
-EXPO_PUBLIC_REVENUECAT_ANDROID_KEY=goog_your_android_key
-```
+**Stack:**
+- **Frontend:** Expo (React Native) - iOS & Android
+- **Backend:** FastAPI (Python) on Railway
+- **Database:** Supabase (PostgreSQL)
+- **AI:** Google Gemini 2.5 Flash
+- **Payments:** RevenueCat
 
 ---
 
 ## 2. Supabase Setup
 
-### Create a Supabase Project
+### Step 1: Create Supabase Project
 
-1. Go to [supabase.com](https://supabase.com)
-2. Create a new project
-3. Note your project URL and anon key
+1. Go to [supabase.com](https://supabase.com) and sign up/login
+2. Click **New Project**
+3. Choose an organization and enter:
+   - **Name:** `habitgpt`
+   - **Database Password:** Generate a strong password (save it!)
+   - **Region:** Choose closest to your users
+4. Click **Create new project** (takes ~2 minutes)
 
-### SQL Schema Setup
+### Step 2: Get Your Credentials
 
-Run these SQL commands in Supabase SQL Editor to create the required tables:
+Once the project is ready:
+
+1. Go to **Settings → API**
+2. Copy these values:
+   - **Project URL:** `https://xxxxx.supabase.co`
+   - **anon (public) key:** For frontend
+   - **service_role key:** For backend (keep this secret!)
+
+### Step 3: Create Database Tables
+
+Go to **SQL Editor** and run this complete schema:
 
 ```sql
 -- Enable UUID extension
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
--- Users table
+-- =============================================
+-- USERS TABLE
+-- =============================================
 CREATE TABLE IF NOT EXISTS users (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     email TEXT UNIQUE NOT NULL,
@@ -87,21 +91,53 @@ CREATE TABLE IF NOT EXISTS users (
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Onboarding profiles table (HabitGPT specific)
+-- =============================================
+-- ONBOARDING PROFILES TABLE
+-- Stores answers from the 7 onboarding questions
+-- =============================================
 CREATE TABLE IF NOT EXISTS onboarding_profiles (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     user_id UUID REFERENCES users(id) ON DELETE CASCADE,
-    primary_change_domain TEXT NOT NULL, -- sleep_energy, focus_productivity, health_fitness, etc.
-    failure_patterns TEXT[] DEFAULT '{}', -- mornings, evenings, weekends, etc.
-    baseline_consistency_level TEXT NOT NULL, -- very_inconsistent, somewhat_inconsistent, etc.
-    primary_obstacle TEXT NOT NULL, -- lack_motivation, forgetting, poor_planning, etc.
-    max_daily_effort_minutes INTEGER DEFAULT 10, -- 5, 10, 20, 30
-    miss_response_type TEXT NOT NULL, -- guilty_give_up, try_again, ignore_drift, depends
-    coach_style_preference TEXT DEFAULT 'adaptive', -- gentle, structured, strict, adaptive
+    
+    -- Q1: What do you want to change?
+    primary_change_domain TEXT NOT NULL,
+    -- Options: sleep_energy, focus_productivity, health_fitness, 
+    --          spiritual_mental, discipline, relationships, specific
+    
+    -- Q2: When do you usually fail?
+    failure_patterns TEXT[] DEFAULT '{}',
+    -- Options: mornings, evenings, weekends, stressful_days, 
+    --          miss_one_day, quit_no_reason
+    
+    -- Q3: How consistent are you?
+    baseline_consistency_level TEXT NOT NULL,
+    -- Options: very_inconsistent, somewhat_inconsistent, 
+    --          mostly_consistent, extremely_consistent
+    
+    -- Q4: What usually stops you?
+    primary_obstacle TEXT NOT NULL,
+    -- Options: lack_motivation, forgetting, poor_planning, 
+    --          low_energy, distractions, dont_know
+    
+    -- Q5: Daily effort available
+    max_daily_effort_minutes INTEGER DEFAULT 10,
+    -- Options: 5, 10, 20, 30
+    
+    -- Q6: How do you respond when you miss a day?
+    miss_response_type TEXT NOT NULL,
+    -- Options: guilty_give_up, try_again, ignore_drift, depends
+    
+    -- Q7: Coach style preference
+    coach_style_preference TEXT DEFAULT 'adaptive',
+    -- Options: gentle, structured, strict, adaptive
+    
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Habit instances table
+-- =============================================
+-- HABIT INSTANCES TABLE
+-- Each habit a user is building
+-- =============================================
 CREATE TABLE IF NOT EXISTS habit_instances (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -116,12 +152,21 @@ CREATE TABLE IF NOT EXISTS habit_instances (
     current_streak INTEGER DEFAULT 0,
     longest_streak INTEGER DEFAULT 0,
     last_completed_date TIMESTAMPTZ,
+    
+    -- Stores the AI-generated 29-day roadmap as JSON
     roadmap JSONB,
+    
+    -- Chat history with AI coach
     chat_history JSONB DEFAULT '[]',
-    created_at TIMESTAMPTZ DEFAULT NOW()
+    
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Subscriptions table
+-- =============================================
+-- SUBSCRIPTIONS TABLE
+-- RevenueCat subscription status
+-- =============================================
 CREATE TABLE IF NOT EXISTS subscriptions (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     user_id UUID UNIQUE NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -135,7 +180,9 @@ CREATE TABLE IF NOT EXISTS subscriptions (
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Notification preferences table
+-- =============================================
+-- NOTIFICATION PREFERENCES TABLE
+-- =============================================
 CREATE TABLE IF NOT EXISTS notification_preferences (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     user_id UUID UNIQUE NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -151,7 +198,9 @@ CREATE TABLE IF NOT EXISTS notification_preferences (
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Create indexes for better query performance
+-- =============================================
+-- INDEXES
+-- =============================================
 CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
 CREATE INDEX IF NOT EXISTS idx_users_google_id ON users(google_id);
 CREATE INDEX IF NOT EXISTS idx_onboarding_profiles_user_id ON onboarding_profiles(user_id);
@@ -159,65 +208,93 @@ CREATE INDEX IF NOT EXISTS idx_habit_instances_user_id ON habit_instances(user_i
 CREATE INDEX IF NOT EXISTS idx_habit_instances_status ON habit_instances(status);
 CREATE INDEX IF NOT EXISTS idx_subscriptions_user_id ON subscriptions(user_id);
 
--- Row Level Security (RLS) Policies
-ALTER TABLE users ENABLE ROW LEVEL SECURITY;
-ALTER TABLE onboarding_profiles ENABLE ROW LEVEL SECURITY;
-ALTER TABLE habit_instances ENABLE ROW LEVEL SECURITY;
-ALTER TABLE subscriptions ENABLE ROW LEVEL SECURITY;
-ALTER TABLE notification_preferences ENABLE ROW LEVEL SECURITY;
+-- =============================================
+-- ROW LEVEL SECURITY (Optional but recommended)
+-- =============================================
+-- Uncomment these if you want RLS enabled
 
--- Users can read/update their own data
-CREATE POLICY "Users can read own data" ON users
-    FOR SELECT USING (auth.uid() = id);
+-- ALTER TABLE users ENABLE ROW LEVEL SECURITY;
+-- ALTER TABLE onboarding_profiles ENABLE ROW LEVEL SECURITY;
+-- ALTER TABLE habit_instances ENABLE ROW LEVEL SECURITY;
+-- ALTER TABLE subscriptions ENABLE ROW LEVEL SECURITY;
+-- ALTER TABLE notification_preferences ENABLE ROW LEVEL SECURITY;
+```
 
-CREATE POLICY "Users can update own data" ON users
-    FOR UPDATE USING (auth.uid() = id);
+Click **Run** to execute the SQL.
 
--- Onboarding profiles policies
-CREATE POLICY "Users can read own onboarding profile" ON onboarding_profiles
-    FOR SELECT USING (auth.uid() = user_id);
+### Step 4: Verify Tables
 
-CREATE POLICY "Users can insert own onboarding profile" ON onboarding_profiles
-    FOR INSERT WITH CHECK (auth.uid() = user_id);
+Go to **Table Editor** in the sidebar. You should see:
+- `users`
+- `onboarding_profiles`
+- `habit_instances`
+- `subscriptions`
+- `notification_preferences`
 
-CREATE POLICY "Users can update own onboarding profile" ON onboarding_profiles
-    FOR UPDATE USING (auth.uid() = user_id);
+---
 
--- Habit instances policies
-CREATE POLICY "Users can read own habits" ON habit_instances
-    FOR SELECT USING (auth.uid() = user_id);
+## 3. Railway Backend Deployment
 
-CREATE POLICY "Users can insert own habits" ON habit_instances
-    FOR INSERT WITH CHECK (auth.uid() = user_id);
+### Step 1: Prepare Backend
 
-CREATE POLICY "Users can update own habits" ON habit_instances
-    FOR UPDATE USING (auth.uid() = user_id);
+The backend is located in `/backend` and includes these Railway-specific files:
+- `Procfile` - Specifies the start command
+- `railway.json` - Railway configuration
+- `runtime.txt` - Python version
+- `nixpacks.toml` - Build configuration
 
-CREATE POLICY "Users can delete own habits" ON habit_instances
-    FOR DELETE USING (auth.uid() = user_id);
+### Step 2: Create Railway Account
 
--- Subscriptions policies
-CREATE POLICY "Users can read own subscription" ON subscriptions
-    FOR SELECT USING (auth.uid() = user_id);
+1. Go to [railway.app](https://railway.app) and sign up with GitHub
+2. Click **New Project** → **Deploy from GitHub repo**
+3. Select your repository
+4. **Important:** Set the **Root Directory** to `/backend`
 
--- Notification preferences policies
-CREATE POLICY "Users can read own notifications" ON notification_preferences
-    FOR SELECT USING (auth.uid() = user_id);
+### Step 3: Configure Environment Variables
 
-CREATE POLICY "Users can update own notifications" ON notification_preferences
-    FOR UPDATE USING (auth.uid() = user_id);
+In Railway, go to your service → **Variables** and add:
+
+| Variable | Value | Required |
+|----------|-------|----------|
+| `SUPABASE_URL` | `https://xxxxx.supabase.co` | ✅ Yes |
+| `SUPABASE_SERVICE_KEY` | Your service_role key | ✅ Yes |
+| `GEMINI_API_KEY` | Your Gemini API key | ✅ Yes |
+| `PORT` | `8001` | Optional (Railway sets this) |
+| `REVENUECAT_WEBHOOK_SECRET` | Your webhook secret | Optional |
+
+### Step 4: Deploy
+
+1. Railway will auto-deploy when you push to GitHub
+2. Or click **Deploy** manually
+3. Wait for the build to complete (~2-3 minutes)
+
+### Step 5: Get Your API URL
+
+After deployment:
+1. Go to **Settings** → **Networking**
+2. Click **Generate Domain** to get a public URL
+3. Your API will be at: `https://your-app.railway.app`
+
+### Step 6: Test the Deployment
+
+```bash
+# Health check
+curl https://your-app.railway.app/api/health
+
+# Should return:
+# {"status":"healthy","timestamp":"...","database":"connected"}
 ```
 
 ---
 
-## 3. RevenueCat Setup
+## 4. RevenueCat Setup
 
-### Create RevenueCat Account
+### Step 1: Create RevenueCat Account
 
-1. Go to [revenuecat.com](https://www.revenuecat.com)
-2. Create a new project called "HabitGPT"
+1. Go to [revenuecat.com](https://www.revenuecat.com) and sign up
+2. Create a new project: **HabitGPT**
 
-### Configure Products
+### Step 2: Configure Products
 
 Create these products in App Store Connect / Google Play Console:
 
@@ -226,148 +303,229 @@ Create these products in App Store Connect / Google Play Console:
 | `habitgpt_monthly_1999` | HabitGPT Monthly | $19.99 | Monthly |
 | `habitgpt_yearly_15999` | HabitGPT Yearly | $159.99 | Yearly |
 
-### RevenueCat Configuration
+### Step 3: RevenueCat Configuration
 
-1. **Add iOS App:**
-   - Bundle ID: `com.yourcompany.habitgpt`
-   - App Store Connect API Key
+**For iOS:**
+1. Add iOS App with Bundle ID: `com.yourcompany.habitgpt`
+2. Upload App Store Connect API Key
 
-2. **Add Android App:**
-   - Package Name: `com.yourcompany.habitgpt`
-   - Google Play Service Account JSON
+**For Android:**
+1. Add Android App with Package Name: `com.yourcompany.habitgpt`
+2. Upload Google Play Service Account JSON
 
-3. **Create Entitlement:**
-   - Identifier: `premium`
-   - Attach both products to this entitlement
+### Step 4: Create Entitlement & Offering
 
-4. **Create Offering:**
-   - Identifier: `default`
-   - Add Monthly and Yearly packages
+1. **Entitlement:** Create `premium` entitlement
+2. **Offering:** Create `default` offering with Monthly and Yearly packages
 
-5. **Webhook Configuration:**
-   - URL: `https://your-backend-url/api/webhooks/revenuecat`
-   - Events: All subscription events
+### Step 5: Configure Webhook
 
-### Get API Keys
+1. Go to **Project Settings → Webhooks**
+2. Add webhook URL: `https://your-railway-app.railway.app/api/webhooks/revenuecat`
+3. Enable all subscription events
 
-Copy these keys to your `.env`:
-- iOS: App Settings → API Keys → iOS key
-- Android: App Settings → API Keys → Android key
+### Step 6: Get API Keys
 
----
-
-## 4. Google Authentication
-
-### Create Google Cloud Project
-
-1. Go to [console.cloud.google.com](https://console.cloud.google.com)
-2. Create a new project: "HabitGPT"
-
-### Enable APIs
-
-- Google+ API
-- Google Identity Services API
-
-### Create OAuth Credentials
-
-**Web Client:**
-- Authorized JavaScript origins: Your frontend URL
-- Authorized redirect URIs: Your Supabase callback URL
-
-**Android Client:**
-- Package name: `com.yourcompany.habitgpt`
-- SHA-1 certificate fingerprint (from `keytool`)
-
-**iOS Client:**
-- Bundle ID: `com.yourcompany.habitgpt`
-
-### Supabase Google Provider
-
-1. Go to Authentication → Providers → Google
-2. Enable Google provider
-3. Add Client ID and Client Secret from Google Cloud
+Copy these to your mobile app:
+- **iOS Key:** Project → Apps → iOS → API Key
+- **Android Key:** Project → Apps → Android → API Key
 
 ---
 
-## 5. Gemini AI Setup
+## 5. Expo Mobile App Setup
 
-### Get Gemini API Key
-
-1. Go to [aistudio.google.com](https://aistudio.google.com)
-2. Create an API key
-3. Add to backend `.env` as `GEMINI_API_KEY`
-
-### Model Configuration
-
-HabitGPT uses `gemini-2.5-flash` for:
-- Habit clarification conversations
-- 29-day roadmap generation
-- Personalized task creation
-
----
-
-## 6. Running the App
-
-### Backend
-
-```bash
-cd backend
-pip install -r requirements.txt
-uvicorn server:app --host 0.0.0.0 --port 8001 --reload
-```
-
-### Frontend
+### Step 1: Install Dependencies
 
 ```bash
 cd frontend
 yarn install
+```
+
+### Step 2: Configure Environment Variables
+
+Create/update `/frontend/.env`:
+
+```env
+# API - Use your Railway deployed URL
+EXPO_PUBLIC_BACKEND_URL=https://your-app.railway.app
+
+# Supabase (for future Google Auth)
+EXPO_PUBLIC_SUPABASE_URL=https://xxxxx.supabase.co
+EXPO_PUBLIC_SUPABASE_ANON_KEY=your_anon_key
+
+# RevenueCat
+EXPO_PUBLIC_REVENUECAT_IOS_KEY=appl_xxxxxx
+EXPO_PUBLIC_REVENUECAT_ANDROID_KEY=goog_xxxxxx
+
+# Google OAuth (optional)
+EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID=xxxxx.apps.googleusercontent.com
+EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID=xxxxx.apps.googleusercontent.com
+EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID=xxxxx.apps.googleusercontent.com
+```
+
+### Step 3: Update app.json
+
+Update `/frontend/app.json` with your app details:
+
+```json
+{
+  "expo": {
+    "name": "HabitGPT",
+    "slug": "habitgpt",
+    "scheme": "habitgpt",
+    "version": "1.0.0",
+    "ios": {
+      "bundleIdentifier": "com.yourcompany.habitgpt"
+    },
+    "android": {
+      "package": "com.yourcompany.habitgpt"
+    }
+  }
+}
+```
+
+### Step 4: Run Development
+
+```bash
 npx expo start
 ```
 
-### Testing
+Scan QR code with Expo Go app on your phone.
 
-1. Scan QR code with Expo Go app
-2. Complete 7-step onboarding:
-   - Q1: What do you want to change? (sets habit domain)
-   - Q2: When do you fail? (predicts failure points)
-   - Q3: How consistent are you? (controls difficulty)
-   - Q4: What stops you? (maps to reminders)
-   - Q5: Daily effort available (sets task intensity)
-   - Q6: Miss response (defines recovery logic)
-   - Q7: Coach style (controls tone & notifications)
-3. Chat with HabitGPT to select a habit
-4. Start free trial and view 29-day roadmap
+### Step 5: Build for Production
+
+```bash
+# iOS
+eas build --platform ios
+
+# Android
+eas build --platform android
+```
 
 ---
 
-## Coach Style Configuration
+## 6. Google Authentication
 
-The app supports 4 coach styles that affect notifications and AI responses:
+### Step 1: Google Cloud Setup
 
-| Style | Tone | Example Notification |
-|-------|------|---------------------|
-| Gentle | Warm, supportive | "Good morning! Ready to nurture your habit today? You've got this! 🌅" |
-| Structured | Professional, organized | "Morning check-in: Your habit is scheduled for today. Plan accordingly." |
-| Strict | Direct, no-nonsense | "Day started. Your habit awaits. Execute." |
-| Adaptive | Context-aware | "Based on your progress, today's a great day to build momentum." |
+1. Go to [console.cloud.google.com](https://console.cloud.google.com)
+2. Create project: **HabitGPT**
+3. Enable **Google Identity Services API**
+
+### Step 2: Create OAuth Credentials
+
+Create OAuth 2.0 Client IDs for:
+- **Web** - For Supabase callback
+- **iOS** - Bundle ID: `com.yourcompany.habitgpt`
+- **Android** - Package + SHA-1 fingerprint
+
+### Step 3: Configure Supabase
+
+1. Go to **Authentication → Providers → Google**
+2. Enable and add Client ID + Secret
+3. Copy the callback URL to Google Cloud console
+
+---
+
+## 7. Testing
+
+### Test Backend Locally
+
+```bash
+cd backend
+pip install -r requirements.txt
+
+# Set environment variables
+export SUPABASE_URL="https://xxxxx.supabase.co"
+export SUPABASE_SERVICE_KEY="your_service_key"
+export GEMINI_API_KEY="your_gemini_key"
+
+# Run server
+uvicorn server:app --reload --port 8001
+```
+
+### Test API Endpoints
+
+```bash
+# Health check
+curl http://localhost:8001/api/health
+
+# Create user
+curl -X POST http://localhost:8001/api/users \
+  -H "Content-Type: application/json" \
+  -d '{"email": "test@example.com", "name": "Test User"}'
+
+# Create onboarding profile
+curl -X POST http://localhost:8001/api/onboarding \
+  -H "Content-Type: application/json" \
+  -d '{
+    "primary_change_domain": "health_fitness",
+    "failure_patterns": ["mornings", "weekends"],
+    "baseline_consistency_level": "somewhat_inconsistent",
+    "primary_obstacle": "lack_motivation",
+    "max_daily_effort_minutes": 10,
+    "miss_response_type": "try_again",
+    "coach_style_preference": "gentle"
+  }'
+```
+
+### Test Mobile App
+
+1. Complete the 7-step onboarding
+2. Chat with AI to select a habit
+3. View the 29-day roadmap
+4. Complete daily tasks
+
+---
+
+## Coach Styles Reference
+
+| Style | Notification Tone | When Miss Day |
+|-------|-------------------|---------------|
+| **Gentle** | "You've got this! 🌅" | "It's okay, tomorrow is a fresh start 🌱" |
+| **Structured** | "Your habit is scheduled. Plan accordingly." | "Let's make sure tomorrow counts." |
+| **Strict** | "Execute." | "No excuses. Get it done." |
+| **Adaptive** | "Based on your progress..." | "Let's adjust your approach." |
 
 ---
 
 ## Troubleshooting
 
-### Common Issues
+### Backend Issues
 
-1. **Gemini API errors**: Check API key is valid and has quota
-2. **RevenueCat products not showing**: Verify products in App Store Connect / Play Console
-3. **Google sign-in fails**: Check OAuth client IDs match platform
-4. **Notifications not working**: Ensure push token is registered
+```bash
+# Check Railway logs
+railway logs
 
-### Support
+# Local debugging
+uvicorn server:app --reload --log-level debug
+```
 
-For issues, check:
-- Backend logs: `tail -f /var/log/supervisor/backend.err.log`
-- Frontend logs: Metro bundler console
+### Supabase Issues
+
+- Verify service key has full access
+- Check if tables exist in Table Editor
+- Review SQL errors in Logs
+
+### Mobile App Issues
+
+```bash
+# Clear cache
+npx expo start --clear
+
+# Check Metro bundler logs
+# Look for red error screens in Expo Go
+```
 
 ---
 
-**Happy Habit Building with HabitGPT!**
+## Support
+
+- **Supabase Docs:** [supabase.com/docs](https://supabase.com/docs)
+- **Railway Docs:** [docs.railway.app](https://docs.railway.app)
+- **RevenueCat Docs:** [docs.revenuecat.com](https://docs.revenuecat.com)
+- **Expo Docs:** [docs.expo.dev](https://docs.expo.dev)
+
+---
+
+**Happy Habit Building with HabitGPT! 🌱**
