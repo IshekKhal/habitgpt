@@ -201,11 +201,12 @@ RESPONSE FORMAT:
     return response
 
 async def generate_skill_roadmap(skill_name: str, category: str, duration_days: int, onboarding_profile: Optional[dict] = None):
-    """Generate a complete roadmap for learning a skill using Gemini"""
-    model = get_gemini_model()
+    """Generate a complete roadmap for learning a skill using Gemini via Emergent Integrations"""
     
     daily_time = onboarding_profile.get('daily_time_minutes', 60) if onboarding_profile else 60
     learning_prefs = onboarding_profile.get('learning_preferences', ['videos', 'hands-on']) if onboarding_profile else ['videos', 'hands-on']
+    
+    system_prompt = """You are a learning roadmap generator. You MUST respond with valid JSON only - no markdown, no code blocks, no explanation text. Just raw JSON."""
     
     prompt = f"""Generate a detailed {duration_days}-day learning roadmap for: {skill_name} (Category: {category})
 
@@ -253,10 +254,18 @@ IMPORTANT:
 4. Tasks should progressively build skills
 5. Include a mix of learning and practice tasks
 
-Return ONLY the JSON, no markdown formatting:"""
+Return ONLY valid JSON - no markdown code blocks, no explanation:"""
 
-    response = model.generate_content(prompt)
-    response_text = response.text.strip()
+    # Create LlmChat instance
+    session_id = str(uuid.uuid4())
+    chat = LlmChat(
+        api_key=EMERGENT_LLM_KEY,
+        session_id=session_id,
+        system_message=system_prompt
+    ).with_model("gemini", "gemini-2.0-flash")
+    
+    response_text = await chat.send_message(UserMessage(text=prompt))
+    response_text = response_text.strip()
     
     # Clean up response - remove markdown code blocks if present
     if response_text.startswith('```'):
