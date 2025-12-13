@@ -3,8 +3,8 @@ index 1004782..97bd3fd 100644
 --- a/frontend/.env
 +++ b/frontend/.env
 @@ -2,4 +2,16 @@ EXPO_TUNNEL_SUBDOMAIN=skillforge-108
- EXPO_PACKAGER_HOSTNAME=https://skillforge-108.preview.emergentagent.com
- EXPO_PUBLIC_BACKEND_URL=https://skillforge-108.preview.emergentagent.com
+ EXPO_PACKAGER_HOSTNAME=https://dailyroute-1.preview.emergentagent.com
+ EXPO_PUBLIC_BACKEND_URL=https://dailyroute-1.preview.emergentagent.com
  EXPO_USE_FAST_RESOLVER="1"
 -METRO_CACHE_ROOT=/app/frontend/.metro-cache
 \ No newline at end of file

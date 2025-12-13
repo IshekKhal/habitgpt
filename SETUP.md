@@ -102,8 +102,8 @@ REVENUECAT_GOOGLE_API_KEY="your-google-api-key"
 ```env
 # Expo Configuration (Auto-configured, do not modify)
 EXPO_TUNNEL_SUBDOMAIN=your-subdomain
-EXPO_PACKAGER_HOSTNAME=https://your-subdomain.preview.emergentagent.com
-EXPO_PUBLIC_BACKEND_URL=https://your-subdomain.preview.emergentagent.com
+EXPO_PACKAGER_HOSTNAME=https://dailyroute-1.preview.emergentagent.com
+EXPO_PUBLIC_BACKEND_URL=https://dailyroute-1.preview.emergentagent.com
 
 # Supabase Configuration
 EXPO_PUBLIC_SUPABASE_URL="https://your-project.supabase.co"
