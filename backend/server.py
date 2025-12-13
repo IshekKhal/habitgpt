@@ -714,6 +714,162 @@ async def start_trial(user_id: str):
     
     return {"status": "success", "message": "Trial started", "trial_end_date": (datetime.utcnow() + timedelta(days=90)).isoformat()}
 
+# ==================== SUBSCRIPTION ROUTES ====================
+
+class SubscriptionStatus(BaseModel):
+    is_subscribed: bool
+    is_trial_active: bool = False
+    trial_end_date: Optional[datetime] = None
+    subscription_end_date: Optional[datetime] = None
+    product_id: Optional[str] = None
+    will_renew: bool = False
+
+class UpdateSubscriptionRequest(BaseModel):
+    is_subscribed: bool
+    is_trial_active: Optional[bool] = None
+    trial_end_date: Optional[str] = None
+    expiration_date: Optional[str] = None
+    product_id: Optional[str] = None
+    will_renew: Optional[bool] = None
+
+@api_router.get("/users/{user_id}/subscription")
+async def get_subscription_status(user_id: str):
+    """Get subscription status for a user"""
+    # Check subscriptions collection
+    subscription = await db.subscriptions.find_one({"user_id": user_id})
+    
+    if subscription:
+        # Check if subscription is still valid
+        is_valid = True
+        if subscription.get("subscription_end_date"):
+            end_date = subscription["subscription_end_date"]
+            if isinstance(end_date, str):
+                end_date = datetime.fromisoformat(end_date.replace('Z', '+00:00'))
+            is_valid = end_date > datetime.utcnow()
+        
+        return {
+            "is_subscribed": is_valid and subscription.get("is_subscribed", False),
+            "is_trial_active": subscription.get("is_trial_active", False),
+            "trial_end_date": subscription.get("trial_end_date"),
+            "subscription_end_date": subscription.get("subscription_end_date"),
+            "product_id": subscription.get("product_id"),
+            "will_renew": subscription.get("will_renew", False)
+        }
+    
+    # Check if user has active trial from users collection
+    user = await db.users.find_one({"id": user_id})
+    if user and user.get("trial_started"):
+        trial_start = user.get("trial_start_date")
+        if trial_start:
+            trial_end = trial_start + timedelta(days=30)  # First month free
+            is_trial_active = datetime.utcnow() < trial_end
+            return {
+                "is_subscribed": is_trial_active,
+                "is_trial_active": is_trial_active,
+                "trial_end_date": trial_end.isoformat() if is_trial_active else None,
+                "subscription_end_date": None,
+                "product_id": None,
+                "will_renew": False
+            }
+    
+    return {
+        "is_subscribed": False,
+        "is_trial_active": False,
+        "trial_end_date": None,
+        "subscription_end_date": None,
+        "product_id": None,
+        "will_renew": False
+    }
+
+@api_router.put("/users/{user_id}/subscription")
+async def update_subscription_status(user_id: str, request: UpdateSubscriptionRequest):
+    """Update subscription status for a user (called after RevenueCat events)"""
+    subscription_data = {
+        "user_id": user_id,
+        "is_subscribed": request.is_subscribed,
+        "is_trial_active": request.is_trial_active or False,
+        "will_renew": request.will_renew or False,
+        "updated_at": datetime.utcnow()
+    }
+    
+    if request.trial_end_date:
+        subscription_data["trial_end_date"] = request.trial_end_date
+    if request.expiration_date:
+        subscription_data["subscription_end_date"] = request.expiration_date
+    if request.product_id:
+        subscription_data["product_id"] = request.product_id
+    
+    # Upsert subscription
+    existing = await db.subscriptions.find_one({"user_id": user_id})
+    if existing:
+        await db.subscriptions.update_one(
+            {"user_id": user_id},
+            {"$set": subscription_data}
+        )
+    else:
+        subscription_data["created_at"] = datetime.utcnow()
+        await db.subscriptions.insert_one(subscription_data)
+    
+    # Also update user's subscription_active flag
+    await db.users.update_one(
+        {"id": user_id},
+        {"$set": {"subscription_active": request.is_subscribed}}
+    )
+    
+    return {"status": "success", "message": "Subscription status updated"}
+
+@api_router.post("/webhooks/revenuecat")
+async def revenuecat_webhook(payload: dict):
+    """Handle RevenueCat webhook events for subscription updates"""
+    event_type = payload.get("event", {}).get("type")
+    app_user_id = payload.get("event", {}).get("app_user_id")
+    
+    if not app_user_id:
+        raise HTTPException(status_code=400, detail="Missing app_user_id")
+    
+    logger.info(f"RevenueCat webhook: {event_type} for user {app_user_id}")
+    
+    # Handle different event types
+    if event_type in ["INITIAL_PURCHASE", "RENEWAL", "PRODUCT_CHANGE"]:
+        # Subscription activated or renewed
+        expiration_date = payload.get("event", {}).get("expiration_at_ms")
+        product_id = payload.get("event", {}).get("product_id")
+        
+        subscription_data = {
+            "user_id": app_user_id,
+            "is_subscribed": True,
+            "is_trial_active": event_type == "INITIAL_PURCHASE",
+            "will_renew": True,
+            "product_id": product_id,
+            "updated_at": datetime.utcnow()
+        }
+        
+        if expiration_date:
+            subscription_data["subscription_end_date"] = datetime.fromtimestamp(expiration_date / 1000)
+        
+        existing = await db.subscriptions.find_one({"user_id": app_user_id})
+        if existing:
+            await db.subscriptions.update_one({"user_id": app_user_id}, {"$set": subscription_data})
+        else:
+            subscription_data["created_at"] = datetime.utcnow()
+            await db.subscriptions.insert_one(subscription_data)
+        
+        await db.users.update_one({"id": app_user_id}, {"$set": {"subscription_active": True}})
+        
+    elif event_type in ["CANCELLATION", "EXPIRATION", "BILLING_ISSUE"]:
+        # Subscription cancelled or expired
+        await db.subscriptions.update_one(
+            {"user_id": app_user_id},
+            {"$set": {
+                "is_subscribed": False,
+                "will_renew": False,
+                "updated_at": datetime.utcnow()
+            }}
+        )
+        await db.users.update_one({"id": app_user_id}, {"$set": {"subscription_active": False}})
+    
+    return {"status": "success"}
+
 # Include the router in the main app
 app.include_router(api_router)
 
