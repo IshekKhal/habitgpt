@@ -19,11 +19,18 @@ load_dotenv(ROOT_DIR / '.env')
 SUPABASE_URL = os.environ.get('SUPABASE_URL', '')
 SUPABASE_KEY = os.environ.get('SUPABASE_SERVICE_KEY', os.environ.get('SUPABASE_ANON_KEY', ''))
 
-if not SUPABASE_URL or not SUPABASE_KEY:
-    logging.warning("Supabase credentials not set. Database operations will fail.")
-    supabase: Optional[Client] = None
+supabase: Optional[Client] = None
+
+# Initialize Supabase only if valid credentials are provided
+if SUPABASE_URL and SUPABASE_KEY and SUPABASE_URL.startswith('https://'):
+    try:
+        supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
+        logging.info("Supabase connected successfully")
+    except Exception as e:
+        logging.warning(f"Failed to connect to Supabase: {e}")
+        supabase = None
 else:
-    supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
+    logging.warning("Supabase credentials not set or invalid. Database operations will fail.")
 
 # Configure Gemini with user-provided API key
 GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY', '')
