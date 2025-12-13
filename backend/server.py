@@ -18,7 +18,7 @@ load_dotenv(ROOT_DIR / '.env')
 # MongoDB connection
 mongo_url = os.environ['MONGO_URL']
 client = AsyncIOMotorClient(mongo_url)
-db = client[os.environ.get('DB_NAME', 'skillgpt_db')]
+db = client[os.environ.get('DB_NAME', 'habitgpt_db')]
 
 # Configure Gemini with user-provided API key
 GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY', '')
@@ -28,7 +28,7 @@ else:
     logging.warning("GEMINI_API_KEY not set. AI features will not work.")
 
 # Create the main app
-app = FastAPI(title="SkillGPT API")
+app = FastAPI(title="HabitGPT API")
 
 # Create a router with the /api prefix
 api_router = APIRouter(prefix="/api")
@@ -40,30 +40,69 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# ==================== COACH STYLE CONFIGURATIONS ====================
+
+COACH_STYLES = {
+    'gentle': {
+        'name': 'Gentle & Encouraging',
+        'missed_day_message': "It's okay to have an off day. Tomorrow is a fresh start! 🌱",
+        'reminder_tone': 'friendly',
+        'streak_broken_message': "Don't worry about the streak. What matters is getting back on track.",
+        'morning_notification': "Good morning! Ready to nurture your habit today? You've got this! 🌅",
+        'afternoon_notification': "Gentle reminder — have you had a chance to work on your habit? No pressure! 💚",
+        'evening_notification': "Winding down? Perfect time to check in on your habit. Every small step counts! ✨",
+    },
+    'structured': {
+        'name': 'Structured & Firm',
+        'missed_day_message': "You missed today's habit. Let's make sure tomorrow counts.",
+        'reminder_tone': 'professional',
+        'streak_broken_message': "Streak broken. Reset and recommit to your goal.",
+        'morning_notification': "Morning check-in: Your habit is scheduled for today. Plan your time accordingly.",
+        'afternoon_notification': "Afternoon update: Your daily habit task is pending. Complete it before evening.",
+        'evening_notification': "Evening status: Finalize today's habit before midnight to maintain your streak.",
+    },
+    'strict': {
+        'name': 'Strict & No-Excuses',
+        'missed_day_message': "No excuses. You committed to this. Get it done.",
+        'reminder_tone': 'direct',
+        'streak_broken_message': "Streak lost. Start over. No shortcuts.",
+        'morning_notification': "Day started. Your habit awaits. Execute.",
+        'afternoon_notification': "Half the day is gone. Is your habit done? If not, do it now.",
+        'evening_notification': "Final call. Complete your habit or accept the missed day.",
+    },
+    'adaptive': {
+        'name': 'Adaptive',
+        'missed_day_message': "Based on your pattern, let's adjust your approach. What got in the way?",
+        'reminder_tone': 'dynamic',
+        'streak_broken_message': "Let's analyze what went wrong and adapt your plan.",
+        'morning_notification': "Good morning! Based on your progress, today's a great day to build momentum.",
+        'afternoon_notification': "Checking in — how's the habit going? Let me know if you need to adjust.",
+        'evening_notification': "Evening reflection: How did today go? Your feedback helps me help you better.",
+    },
+}
+
 # ==================== MODELS ====================
 
 class OnboardingProfile(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     user_id: Optional[str] = None
-    user_role: str  # student, professional, etc.
-    age_range: str  # Under 16, 16-18, etc.
-    country: str
-    timezone: str
-    daily_time_minutes: int  # 15, 30, 60, 120+
-    learning_preferences: List[str]  # videos, articles, hands-on, etc.
-    learning_history_type: str  # first time, quit midway, etc.
-    motivation_type: str  # career, personal growth, etc.
+    primary_change_domain: str  # sleep_energy, focus_productivity, health_fitness, etc.
+    failure_patterns: List[str] = []  # mornings, evenings, weekends, etc.
+    baseline_consistency_level: str  # very_inconsistent, somewhat_inconsistent, etc.
+    primary_obstacle: str  # lack_motivation, forgetting, poor_planning, etc.
+    max_daily_effort_minutes: int  # 5, 10, 20, 30
+    miss_response_type: str  # guilty_give_up, try_again, ignore_drift, depends
+    coach_style_preference: str  # gentle, structured, strict, adaptive
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
 class OnboardingProfileCreate(BaseModel):
-    user_role: str
-    age_range: str
-    country: str
-    timezone: str
-    daily_time_minutes: int
-    learning_preferences: List[str]
-    learning_history_type: str
-    motivation_type: str
+    primary_change_domain: str
+    failure_patterns: List[str] = []
+    baseline_consistency_level: str
+    primary_obstacle: str
+    max_daily_effort_minutes: int
+    miss_response_type: str
+    coach_style_preference: str
 
 class User(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
@@ -106,34 +145,37 @@ class Resource(BaseModel):
     url: str
     description: str
 
-class SkillRoadmap(BaseModel):
+class HabitRoadmap(BaseModel):
     overview: str
     total_days: int
     milestones: List[Dict[str, Any]]
     day_plans: List[DayPlan]
     resources: List[Resource]
 
-class SkillInstance(BaseModel):
+class HabitInstance(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     user_id: str
-    skill_name: str
-    skill_description: str
+    habit_name: str
+    habit_description: str
     category: str
-    duration_days: int = 90
+    duration_days: int = 29
     start_date: datetime = Field(default_factory=datetime.utcnow)
     end_date: Optional[datetime] = None
     status: str = "active"  # active, completed, paused
     completion_percentage: float = 0.0
-    roadmap: Optional[SkillRoadmap] = None
+    current_streak: int = 0
+    longest_streak: int = 0
+    last_completed_date: Optional[datetime] = None
+    roadmap: Optional[HabitRoadmap] = None
     chat_history: List[Dict[str, str]] = []
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
-class SkillInstanceCreate(BaseModel):
+class HabitInstanceCreate(BaseModel):
     user_id: str
-    skill_name: str
-    skill_description: str
+    habit_name: str
+    habit_description: str
     category: str
-    duration_days: int = 90
+    duration_days: int = 29
 
 class ChatMessage(BaseModel):
     role: str  # user or assistant
@@ -141,7 +183,7 @@ class ChatMessage(BaseModel):
 
 class ChatRequest(BaseModel):
     user_id: str
-    skill_instance_id: Optional[str] = None
+    habit_instance_id: Optional[str] = None
     message: str
     chat_history: List[ChatMessage] = []
 
@@ -155,28 +197,41 @@ def get_gemini_model():
     """Get the Gemini model for chat"""
     return genai.GenerativeModel('gemini-2.5-flash')
 
-async def generate_skill_clarification(user_message: str, chat_history: List[Dict[str, str]], onboarding_profile: Optional[dict] = None):
-    """Generate clarifying questions for skill selection using Gemini"""
+async def generate_habit_clarification(user_message: str, chat_history: List[Dict[str, str]], onboarding_profile: Optional[dict] = None):
+    """Generate clarifying questions for habit selection using Gemini"""
     model = get_gemini_model()
     
     profile_context = ""
+    coach_style = "adaptive"
     if onboarding_profile:
+        coach_style = onboarding_profile.get('coach_style_preference', 'adaptive')
         profile_context = f"""
 User Profile:
-- Role: {onboarding_profile.get('user_role', 'unknown')}
-- Age Range: {onboarding_profile.get('age_range', 'unknown')}
-- Daily Time: {onboarding_profile.get('daily_time_minutes', 60)} minutes
-- Learning Style: {', '.join(onboarding_profile.get('learning_preferences', []))}
-- Motivation: {onboarding_profile.get('motivation_type', 'unknown')}
+- Primary Change Domain: {onboarding_profile.get('primary_change_domain', 'unknown')}
+- Failure Patterns: {', '.join(onboarding_profile.get('failure_patterns', []))}
+- Consistency Level: {onboarding_profile.get('baseline_consistency_level', 'unknown')}
+- Primary Obstacle: {onboarding_profile.get('primary_obstacle', 'unknown')}
+- Daily Effort Available: {onboarding_profile.get('max_daily_effort_minutes', 10)} minutes
+- Miss Response Type: {onboarding_profile.get('miss_response_type', 'unknown')}
+- Preferred Coach Style: {coach_style}
 """
     
     history_text = ""
     for msg in chat_history:
         history_text += f"{msg['role'].upper()}: {msg['content']}\n"
     
-    prompt = f"""You are a skill learning assistant for SkillGPT app. Your job is to help users clarify exactly what skill they want to learn.
+    tone_guidance = {
+        'gentle': "Be warm, encouraging, and supportive. Use positive language.",
+        'structured': "Be clear, organized, and professional. Focus on planning.",
+        'strict': "Be direct and no-nonsense. Focus on commitment and discipline.",
+        'adaptive': "Adapt your tone based on the user's responses and needs.",
+    }
+    
+    prompt = f"""You are a habit formation coach for HabitGPT app. Your job is to help users clarify exactly what habit they want to develop in 29 days.
 
 {profile_context}
+
+TONE: {tone_guidance.get(coach_style, tone_guidance['adaptive'])}
 
 CONVERSATION HISTORY:
 {history_text}
@@ -184,45 +239,66 @@ CONVERSATION HISTORY:
 USER'S LATEST MESSAGE: {user_message}
 
 RULES:
-1. NEVER generate a roadmap until the skill is completely unambiguous
-2. Ask clarifying questions to narrow down the exact skill
-3. Provide 3-4 options when disambiguating
-4. Once the skill is clear, confirm with the user before proceeding
-5. Keep responses concise and friendly
-6. When ready to proceed, end your message with [READY_FOR_ROADMAP:skill_name:category]
+1. NEVER generate a roadmap until the habit is completely clear and actionable
+2. Ask clarifying questions to narrow down the exact habit
+3. Ensure the habit is SPECIFIC, MEASURABLE, and achievable in their daily time ({onboarding_profile.get('max_daily_effort_minutes', 10) if onboarding_profile else 10} minutes)
+4. Consider their failure patterns and obstacles when suggesting
+5. Once the habit is clear, confirm with the user before proceeding
+6. When ready to proceed, end your message with [READY_FOR_ROADMAP:habit_name:category]
 
 RESPONSE FORMAT:
-- If skill is ambiguous: Ask clarifying questions with numbered options
-- If skill is clear but needs goal clarification: Ask about their specific goal
-- If ready for roadmap: Confirm the skill and end with [READY_FOR_ROADMAP:skill_name:category]
+- If habit is vague: Ask clarifying questions with numbered options
+- If habit needs time/trigger clarification: Ask about when and where they'll do it
+- If ready for roadmap: Confirm the habit and end with [READY_FOR_ROADMAP:habit_name:category]
 
-Respond naturally as a helpful assistant:"""
+Categories: sleep_energy, focus_productivity, health_fitness, spiritual_mental, discipline, relationships, other
+
+Respond naturally as a helpful habit coach:"""
 
     response = model.generate_content(prompt)
     return response.text
 
-async def generate_skill_roadmap(skill_name: str, category: str, duration_days: int, onboarding_profile: Optional[dict] = None):
-    """Generate a complete roadmap for learning a skill using Gemini"""
+async def generate_habit_roadmap(habit_name: str, category: str, duration_days: int, onboarding_profile: Optional[dict] = None):
+    """Generate a complete 29-day roadmap for building a habit using Gemini"""
     model = get_gemini_model()
     
-    daily_time = onboarding_profile.get('daily_time_minutes', 60) if onboarding_profile else 60
-    learning_prefs = onboarding_profile.get('learning_preferences', ['videos', 'hands-on']) if onboarding_profile else ['videos', 'hands-on']
+    daily_time = onboarding_profile.get('max_daily_effort_minutes', 10) if onboarding_profile else 10
+    failure_patterns = onboarding_profile.get('failure_patterns', []) if onboarding_profile else []
+    primary_obstacle = onboarding_profile.get('primary_obstacle', 'unknown') if onboarding_profile else 'unknown'
+    consistency_level = onboarding_profile.get('baseline_consistency_level', 'somewhat_inconsistent') if onboarding_profile else 'somewhat_inconsistent'
     
-    prompt = f"""Generate a detailed {duration_days}-day learning roadmap for: {skill_name} (Category: {category})
+    # Adjust difficulty based on consistency
+    difficulty_note = ""
+    if consistency_level in ['very_inconsistent', 'somewhat_inconsistent']:
+        difficulty_note = "Start VERY simple. The first week should be almost impossibly easy."
+    else:
+        difficulty_note = "User is fairly consistent, but still start below their stated capacity."
+    
+    prompt = f"""Generate a detailed {duration_days}-day habit formation roadmap for: {habit_name} (Category: {category})
 
 USER CONTEXT:
-- Daily available time: {daily_time} minutes
-- Preferred learning styles: {', '.join(learning_prefs)}
+- Daily available time: {daily_time} minutes (START BELOW THIS)
+- Failure patterns to address: {', '.join(failure_patterns) if failure_patterns else 'none specified'}
+- Primary obstacle: {primary_obstacle}
+- Consistency level: {consistency_level}
+
+{difficulty_note}
+
+HABIT FORMATION SCIENCE:
+- Days 1-7: Foundation phase - make it SO easy they can't fail
+- Days 8-14: Building phase - slight increase
+- Days 15-21: Momentum phase - establishing routine
+- Days 22-29: Ownership phase - habit becomes identity
 
 Generate a JSON response with this EXACT structure:
 {{
-    "overview": "Brief overview of the learning journey",
+    "overview": "Brief overview of the 29-day habit journey",
     "total_days": {duration_days},
     "milestones": [
-        {{"day": 7, "title": "Milestone 1", "description": "What they should achieve"}},
-        {{"day": 30, "title": "Milestone 2", "description": "What they should achieve"}},
-        {{"day": 60, "title": "Milestone 3", "description": "What they should achieve"}},
-        {{"day": 90, "title": "Final Milestone", "description": "What they should achieve"}}
+        {{"day": 7, "title": "Week 1 Complete", "description": "Foundation established"}},
+        {{"day": 14, "title": "Week 2 Complete", "description": "Building consistency"}},
+        {{"day": 21, "title": "Week 3 Complete", "description": "Momentum achieved"}},
+        {{"day": 29, "title": "Habit Formed!", "description": "Habit ownership achieved"}}
     ],
     "day_plans": [
         {{
@@ -230,29 +306,31 @@ Generate a JSON response with this EXACT structure:
             "tasks": [
                 {{
                     "title": "Task title",
-                    "description": "What to do",
-                    "estimated_minutes": 30,
-                    "resource_links": ["https://youtube.com/..."]
+                    "description": "Specific actionable instruction",
+                    "estimated_minutes": 2,
+                    "resource_links": []
                 }}
             ]
         }}
     ],
     "resources": [
         {{
-            "type": "youtube",
+            "type": "article",
             "title": "Resource title",
             "url": "https://...",
-            "description": "Why this resource is helpful"
+            "description": "Why this resource helps"
         }}
     ]
 }}
 
-IMPORTANT:
-1. Generate day_plans for at least the first 14 days in detail
-2. Each day should have 2-4 tasks that fit within {daily_time} minutes total
-3. Include real, useful YouTube links and article URLs
-4. Tasks should progressively build skills
-5. Include a mix of learning and practice tasks
+CRITICAL RULES:
+1. Generate day_plans for ALL {duration_days} days
+2. Week 1 tasks should take LESS than {max(2, daily_time // 3)} minutes each
+3. Gradually increase - never more than {daily_time} minutes total per day
+4. Each day should have 1-2 tasks maximum for simplicity
+5. Include specific triggers (when/where to do the habit)
+6. Address the user's failure patterns in the plan design
+7. Include motivational tips and progress markers
 
 Return ONLY the JSON, no markdown formatting:"""
 
@@ -278,7 +356,7 @@ Return ONLY the JSON, no markdown formatting:"""
                 task = DailyTask(
                     title=task_data.get('title', ''),
                     description=task_data.get('description', ''),
-                    estimated_minutes=task_data.get('estimated_minutes', 30),
+                    estimated_minutes=task_data.get('estimated_minutes', 5),
                     resource_links=task_data.get('resource_links', [])
                 )
                 tasks.append(task)
@@ -300,7 +378,7 @@ Return ONLY the JSON, no markdown formatting:"""
             )
             processed_resources.append(resource)
         
-        roadmap = SkillRoadmap(
+        roadmap = HabitRoadmap(
             overview=roadmap_data.get('overview', ''),
             total_days=roadmap_data.get('total_days', duration_days),
             milestones=roadmap_data.get('milestones', []),
@@ -314,11 +392,41 @@ Return ONLY the JSON, no markdown formatting:"""
         logger.error(f"Response text: {response_text}")
         raise HTTPException(status_code=500, detail="Failed to generate roadmap")
 
+def calculate_streak(habit_instance: dict, completed_today: bool) -> tuple:
+    """Calculate current and longest streak"""
+    current_streak = habit_instance.get('current_streak', 0)
+    longest_streak = habit_instance.get('longest_streak', 0)
+    last_completed = habit_instance.get('last_completed_date')
+    
+    today = datetime.utcnow().date()
+    
+    if completed_today:
+        if last_completed:
+            last_date = last_completed.date() if isinstance(last_completed, datetime) else datetime.fromisoformat(str(last_completed)).date()
+            days_diff = (today - last_date).days
+            
+            if days_diff == 0:
+                # Already completed today, no change
+                pass
+            elif days_diff == 1:
+                # Consecutive day
+                current_streak += 1
+            else:
+                # Streak broken, start new
+                current_streak = 1
+        else:
+            # First completion
+            current_streak = 1
+        
+        longest_streak = max(longest_streak, current_streak)
+    
+    return current_streak, longest_streak
+
 # ==================== API ROUTES ====================
 
 @api_router.get("/")
 async def root():
-    return {"message": "SkillGPT API is running", "version": "1.0.0"}
+    return {"message": "HabitGPT API is running", "version": "1.0.0"}
 
 @api_router.get("/health")
 async def health_check():
@@ -406,10 +514,10 @@ async def link_onboarding_to_user(profile_id: str, user_id: str):
     
     return {"status": "success", "message": "Profile linked to user"}
 
-# Skill Chat Routes
-@api_router.post("/skills/chat")
-async def skill_chat(request: ChatRequest):
-    """Chat with AI for skill selection and disambiguation"""
+# Habit Chat Routes
+@api_router.post("/habits/chat")
+async def habit_chat(request: ChatRequest):
+    """Chat with AI for habit selection and clarification"""
     # Get user's onboarding profile if available
     onboarding_profile = None
     if request.user_id:
@@ -423,20 +531,20 @@ async def skill_chat(request: ChatRequest):
     chat_history = [{"role": msg.role, "content": msg.content} for msg in request.chat_history]
     
     # Generate AI response
-    response = await generate_skill_clarification(request.message, chat_history, onboarding_profile)
+    response = await generate_habit_clarification(request.message, chat_history, onboarding_profile)
     
     # Check if ready for roadmap
     ready_for_roadmap = "[READY_FOR_ROADMAP" in response
-    skill_name = None
+    habit_name = None
     category = None
     
     if ready_for_roadmap:
-        # Extract skill name and category
+        # Extract habit name and category
         try:
             marker = response.split("[READY_FOR_ROADMAP:")[1].split("]")[0]
             parts = marker.split(":")
-            skill_name = parts[0].strip()
-            category = parts[1].strip() if len(parts) > 1 else "general"
+            habit_name = parts[0].strip()
+            category = parts[1].strip() if len(parts) > 1 else "other"
             # Remove the marker from response
             response = response.split("[READY_FOR_ROADMAP")[0].strip()
         except:
@@ -445,79 +553,80 @@ async def skill_chat(request: ChatRequest):
     return {
         "response": response,
         "ready_for_roadmap": ready_for_roadmap,
-        "skill_name": skill_name,
+        "habit_name": habit_name,
         "category": category
     }
 
-# Skill Instance Routes
-@api_router.post("/skills/instances", response_model=SkillInstance)
-async def create_skill_instance(skill_data: SkillInstanceCreate):
-    """Create a new skill instance and generate roadmap"""
+# Habit Instance Routes
+@api_router.post("/habits/instances", response_model=HabitInstance)
+async def create_habit_instance(habit_data: HabitInstanceCreate):
+    """Create a new habit instance and generate roadmap"""
     # Get user's onboarding profile
     onboarding_profile = None
-    user = await db.users.find_one({"id": skill_data.user_id})
+    user = await db.users.find_one({"id": habit_data.user_id})
     if user and user.get("onboarding_profile_id"):
         profile = await db.onboarding_profiles.find_one({"id": user["onboarding_profile_id"]})
         if profile:
             onboarding_profile = profile
     
     # Generate roadmap
-    roadmap = await generate_skill_roadmap(
-        skill_data.skill_name,
-        skill_data.category,
-        skill_data.duration_days,
+    roadmap = await generate_habit_roadmap(
+        habit_data.habit_name,
+        habit_data.category,
+        habit_data.duration_days,
         onboarding_profile
     )
     
-    # Create skill instance
-    skill_instance = SkillInstance(
-        user_id=skill_data.user_id,
-        skill_name=skill_data.skill_name,
-        skill_description=skill_data.skill_description,
-        category=skill_data.category,
-        duration_days=skill_data.duration_days,
-        end_date=datetime.utcnow() + timedelta(days=skill_data.duration_days),
+    # Create habit instance
+    habit_instance = HabitInstance(
+        user_id=habit_data.user_id,
+        habit_name=habit_data.habit_name,
+        habit_description=habit_data.habit_description,
+        category=habit_data.category,
+        duration_days=habit_data.duration_days,
+        end_date=datetime.utcnow() + timedelta(days=habit_data.duration_days),
         roadmap=roadmap
     )
     
-    await db.skill_instances.insert_one(skill_instance.dict())
-    return skill_instance
+    await db.habit_instances.insert_one(habit_instance.dict())
+    return habit_instance
 
-@api_router.get("/skills/instances/user/{user_id}")
-async def get_user_skill_instances(user_id: str):
-    """Get all skill instances for a user"""
-    instances = await db.skill_instances.find({"user_id": user_id}).to_list(100)
-    return [SkillInstance(**instance) for instance in instances]
+@api_router.get("/habits/instances/user/{user_id}")
+async def get_user_habit_instances(user_id: str):
+    """Get all habit instances for a user"""
+    instances = await db.habit_instances.find({"user_id": user_id}).to_list(100)
+    return [HabitInstance(**instance) for instance in instances]
 
-@api_router.get("/skills/instances/{instance_id}")
-async def get_skill_instance(instance_id: str):
-    """Get a specific skill instance"""
-    instance = await db.skill_instances.find_one({"id": instance_id})
+@api_router.get("/habits/instances/{instance_id}")
+async def get_habit_instance(instance_id: str):
+    """Get a specific habit instance"""
+    instance = await db.habit_instances.find_one({"id": instance_id})
     if not instance:
-        raise HTTPException(status_code=404, detail="Skill instance not found")
-    return SkillInstance(**instance)
+        raise HTTPException(status_code=404, detail="Habit instance not found")
+    return HabitInstance(**instance)
 
-@api_router.delete("/skills/instances/{instance_id}")
-async def delete_skill_instance(instance_id: str):
-    """Delete a skill instance"""
-    result = await db.skill_instances.delete_one({"id": instance_id})
+@api_router.delete("/habits/instances/{instance_id}")
+async def delete_habit_instance(instance_id: str):
+    """Delete a habit instance"""
+    result = await db.habit_instances.delete_one({"id": instance_id})
     if result.deleted_count == 0:
-        raise HTTPException(status_code=404, detail="Skill instance not found")
-    return {"status": "success", "message": "Skill instance deleted"}
+        raise HTTPException(status_code=404, detail="Habit instance not found")
+    return {"status": "success", "message": "Habit instance deleted"}
 
 # Task Routes
-@api_router.put("/skills/instances/{instance_id}/tasks/complete")
+@api_router.put("/habits/instances/{instance_id}/tasks/complete")
 async def complete_task(instance_id: str, request: TaskCompletionRequest):
-    """Mark a task as completed"""
-    instance = await db.skill_instances.find_one({"id": instance_id})
+    """Mark a task as completed and update streaks"""
+    instance = await db.habit_instances.find_one({"id": instance_id})
     if not instance:
-        raise HTTPException(status_code=404, detail="Skill instance not found")
+        raise HTTPException(status_code=404, detail="Habit instance not found")
     
-    skill_instance = SkillInstance(**instance)
+    habit_instance = HabitInstance(**instance)
     
     # Find and update the task
-    if skill_instance.roadmap:
-        for day_plan in skill_instance.roadmap.day_plans:
+    day_completed = False
+    if habit_instance.roadmap:
+        for day_plan in habit_instance.roadmap.day_plans:
             if day_plan.day_number == request.day_number:
                 for task in day_plan.tasks:
                     if task.id == request.task_id:
@@ -528,32 +637,48 @@ async def complete_task(instance_id: str, request: TaskCompletionRequest):
                 # Calculate day completion percentage
                 completed_tasks = sum(1 for t in day_plan.tasks if t.completed)
                 day_plan.completion_percentage = (completed_tasks / len(day_plan.tasks)) * 100 if day_plan.tasks else 0
+                day_completed = day_plan.completion_percentage >= 100
                 break
         
         # Calculate overall completion percentage
-        total_tasks = sum(len(dp.tasks) for dp in skill_instance.roadmap.day_plans)
-        completed_total = sum(sum(1 for t in dp.tasks if t.completed) for dp in skill_instance.roadmap.day_plans)
-        skill_instance.completion_percentage = (completed_total / total_tasks) * 100 if total_tasks > 0 else 0
-        
-        # Update in database
-        await db.skill_instances.update_one(
-            {"id": instance_id},
-            {"$set": skill_instance.dict()}
-        )
+        total_tasks = sum(len(dp.tasks) for dp in habit_instance.roadmap.day_plans)
+        completed_total = sum(sum(1 for t in dp.tasks if t.completed) for dp in habit_instance.roadmap.day_plans)
+        habit_instance.completion_percentage = (completed_total / total_tasks) * 100 if total_tasks > 0 else 0
     
-    return {"status": "success", "completion_percentage": skill_instance.completion_percentage}
+    # Update streak if day is fully completed
+    current_streak = habit_instance.current_streak
+    longest_streak = habit_instance.longest_streak
+    
+    if day_completed:
+        current_streak, longest_streak = calculate_streak(instance, True)
+        habit_instance.current_streak = current_streak
+        habit_instance.longest_streak = longest_streak
+        habit_instance.last_completed_date = datetime.utcnow()
+    
+    # Update in database
+    await db.habit_instances.update_one(
+        {"id": instance_id},
+        {"$set": habit_instance.dict()}
+    )
+    
+    return {
+        "status": "success", 
+        "completion_percentage": habit_instance.completion_percentage,
+        "current_streak": current_streak,
+        "longest_streak": longest_streak
+    }
 
-@api_router.get("/skills/instances/{instance_id}/daily-tasks/{day_number}")
+@api_router.get("/habits/instances/{instance_id}/daily-tasks/{day_number}")
 async def get_daily_tasks(instance_id: str, day_number: int):
     """Get tasks for a specific day"""
-    instance = await db.skill_instances.find_one({"id": instance_id})
+    instance = await db.habit_instances.find_one({"id": instance_id})
     if not instance:
-        raise HTTPException(status_code=404, detail="Skill instance not found")
+        raise HTTPException(status_code=404, detail="Habit instance not found")
     
-    skill_instance = SkillInstance(**instance)
+    habit_instance = HabitInstance(**instance)
     
-    if skill_instance.roadmap:
-        for day_plan in skill_instance.roadmap.day_plans:
+    if habit_instance.roadmap:
+        for day_plan in habit_instance.roadmap.day_plans:
             if day_plan.day_number == day_number:
                 return day_plan
     
@@ -659,38 +784,56 @@ async def get_users_to_notify():
 @api_router.get("/notifications/pending-tasks/{user_id}")
 async def get_pending_tasks_count(user_id: str):
     """Get count of pending tasks for today for a user"""
-    # Get all active skill instances for user
-    instances = await db.skill_instances.find({
+    # Get all active habit instances for user
+    instances = await db.habit_instances.find({
         "user_id": user_id,
         "status": "active"
     }).to_list(100)
     
     total_pending = 0
-    skill_summaries = []
+    habit_summaries = []
     
     for instance in instances:
-        skill_instance = SkillInstance(**instance)
-        if skill_instance.roadmap:
+        habit_instance = HabitInstance(**instance)
+        if habit_instance.roadmap:
             # Calculate current day
-            start_date = skill_instance.start_date
+            start_date = habit_instance.start_date
             today = datetime.utcnow()
             current_day = max(1, (today - start_date).days + 1)
             
             # Find today's day plan
-            for day_plan in skill_instance.roadmap.day_plans:
+            for day_plan in habit_instance.roadmap.day_plans:
                 if day_plan.day_number == current_day:
                     incomplete_tasks = sum(1 for t in day_plan.tasks if not t.completed)
                     total_pending += incomplete_tasks
                     if incomplete_tasks > 0:
-                        skill_summaries.append({
-                            "skill_name": skill_instance.skill_name,
-                            "pending_tasks": incomplete_tasks
+                        habit_summaries.append({
+                            "habit_name": habit_instance.habit_name,
+                            "pending_tasks": incomplete_tasks,
+                            "current_streak": habit_instance.current_streak
                         })
                     break
     
     return {
         "total_pending": total_pending,
-        "skills": skill_summaries
+        "habits": habit_summaries
+    }
+
+@api_router.get("/notifications/coach-messages/{user_id}")
+async def get_coach_messages(user_id: str):
+    """Get coach-style specific notification messages for a user"""
+    # Get user's onboarding profile
+    user = await db.users.find_one({"id": user_id})
+    coach_style = "adaptive"  # default
+    
+    if user and user.get("onboarding_profile_id"):
+        profile = await db.onboarding_profiles.find_one({"id": user["onboarding_profile_id"]})
+        if profile:
+            coach_style = profile.get("coach_style_preference", "adaptive")
+    
+    return {
+        "coach_style": coach_style,
+        "messages": COACH_STYLES.get(coach_style, COACH_STYLES['adaptive'])
     }
 
 # Trial/Payment Routes
@@ -712,7 +855,7 @@ async def start_trial(user_id: str):
         }}
     )
     
-    return {"status": "success", "message": "Trial started", "trial_end_date": (datetime.utcnow() + timedelta(days=90)).isoformat()}
+    return {"status": "success", "message": "Trial started", "trial_end_date": (datetime.utcnow() + timedelta(days=29)).isoformat()}
 
 # ==================== SUBSCRIPTION ROUTES ====================
 
