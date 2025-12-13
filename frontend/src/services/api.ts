@@ -122,4 +122,31 @@ export const startTrial = async (userId: string): Promise<{ trial_end_date: stri
   return response.data;
 };
 
+// Subscription APIs
+export const checkSubscriptionStatus = async (userId: string): Promise<{
+  is_subscribed: boolean;
+  is_trial_active: boolean;
+  trial_end_date?: string;
+  subscription_end_date?: string;
+  product_id?: string;
+  will_renew: boolean;
+}> => {
+  const response = await api.get(`/users/${userId}/subscription`);
+  return response.data;
+};
+
+export const updateSubscriptionStatus = async (
+  userId: string,
+  status: {
+    is_subscribed: boolean;
+    is_trial_active?: boolean;
+    trial_end_date?: string;
+    expiration_date?: string;
+    product_id?: string;
+    will_renew?: boolean;
+  }
+): Promise<void> => {
+  await api.put(`/users/${userId}/subscription`, status);
+};
+
 export default api;
