@@ -147,13 +147,8 @@ class TaskCompletionRequest(BaseModel):
 
 # ==================== HELPER FUNCTIONS ====================
 
-def get_gemini_model():
-    """Get the Gemini model for chat"""
-    return genai.GenerativeModel('gemini-2.0-flash')
-
 async def generate_skill_clarification(user_message: str, chat_history: List[Dict[str, str]], onboarding_profile: Optional[dict] = None):
-    """Generate clarifying questions for skill selection using Gemini"""
-    model = get_gemini_model()
+    """Generate clarifying questions for skill selection using Gemini via Emergent Integrations"""
     
     profile_context = ""
     if onboarding_profile:
@@ -170,14 +165,9 @@ User Profile:
     for msg in chat_history:
         history_text += f"{msg['role'].upper()}: {msg['content']}\n"
     
-    prompt = f"""You are a skill learning assistant for SkillGPT app. Your job is to help users clarify exactly what skill they want to learn.
+    system_prompt = f"""You are a skill learning assistant for SkillGPT app. Your job is to help users clarify exactly what skill they want to learn.
 
 {profile_context}
-
-CONVERSATION HISTORY:
-{history_text}
-
-USER'S LATEST MESSAGE: {user_message}
 
 RULES:
 1. NEVER generate a roadmap until the skill is completely unambiguous
@@ -185,17 +175,30 @@ RULES:
 3. Provide 3-4 options when disambiguating
 4. Once the skill is clear, confirm with the user before proceeding
 5. Keep responses concise and friendly
-6. When ready to proceed, end your message with [READY_FOR_ROADMAP] and include the final skill name
+6. When ready to proceed, end your message with [READY_FOR_ROADMAP:skill_name:category]
 
 RESPONSE FORMAT:
 - If skill is ambiguous: Ask clarifying questions with numbered options
 - If skill is clear but needs goal clarification: Ask about their specific goal
-- If ready for roadmap: Confirm the skill and end with [READY_FOR_ROADMAP:skill_name:category]
+- If ready for roadmap: Confirm the skill and end with [READY_FOR_ROADMAP:skill_name:category]"""
 
-Respond naturally as a helpful assistant:"""
-
-    response = model.generate_content(prompt)
-    return response.text
+    # Create LlmChat instance
+    session_id = str(uuid.uuid4())
+    chat = LlmChat(
+        api_key=EMERGENT_LLM_KEY,
+        session_id=session_id,
+        system_message=system_prompt
+    ).with_model("gemini", "gemini-2.0-flash")
+    
+    # Build the user message with history context
+    full_message = ""
+    if history_text:
+        full_message = f"CONVERSATION HISTORY:\n{history_text}\n\nUSER'S LATEST MESSAGE: {user_message}"
+    else:
+        full_message = user_message
+    
+    response = await chat.send_message(UserMessage(text=full_message))
+    return response
 
 async def generate_skill_roadmap(skill_name: str, category: str, duration_days: int, onboarding_profile: Optional[dict] = None):
     """Generate a complete roadmap for learning a skill using Gemini"""
