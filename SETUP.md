@@ -1,1194 +1,373 @@
-# SkillGPT - Complete Setup Guide
+# HabitGPT Setup Guide
 
-SkillGPT is a React Native (iOS + Android) app that helps users learn any skill within 90 days with AI-powered personalized roadmaps, daily tasks, and progress tracking.
+**Grow any habit in 29 days**
+
+This guide covers the complete setup for HabitGPT, including Supabase, RevenueCat, and Google Authentication.
 
 ---
 
 ## Table of Contents
 
-1. [Prerequisites](#prerequisites)
-2. [Required API Keys & Credentials](#required-api-keys--credentials)
-3. [Environment Configuration](#environment-configuration)
-4. [Supabase Setup & SQL Schemas](#supabase-setup--sql-schemas)
-5. [Google OAuth Setup](#google-oauth-setup)
-6. [RevenueCat Setup](#revenuecat-setup)
-7. [Push Notifications Setup](#push-notifications-setup)
-8. [Running the Application](#running-the-application)
-9. [Feature Walkthrough](#feature-walkthrough)
-10. [API Reference](#api-reference)
-11. [Troubleshooting](#troubleshooting)
+1. [Environment Variables](#1-environment-variables)
+2. [Supabase Setup](#2-supabase-setup)
+3. [RevenueCat Setup](#3-revenuecat-setup)
+4. [Google Authentication](#4-google-authentication)
+5. [Gemini AI Setup](#5-gemini-ai-setup)
+6. [Running the App](#6-running-the-app)
 
 ---
 
-## Prerequisites
+## 1. Environment Variables
 
-- **Node.js** >= 18.x
-- **Yarn** package manager
-- **Python** >= 3.11
-- **MongoDB** (local or cloud instance)
-- **Expo CLI** (`npm install -g expo-cli`)
-- **Expo Go App** on your mobile device (for testing)
-
----
-
-## Required API Keys & Credentials
-
-### 1. Google Gemini API Key (Required)
-- **Purpose**: Powers the AI skill chat and roadmap generation
-- **Get it from**: https://aistudio.google.com/app/apikey
-- **Free tier**: Yes, with generous limits
-- **Required for**: AI chat, skill disambiguation, roadmap generation
-
-### 2. Supabase Credentials (Required for Auth)
-- **Purpose**: User authentication with Google Sign-In, user data storage
-- **Get it from**: https://supabase.com/dashboard
-- **Required credentials**:
-  - `SUPABASE_URL` - Your project URL
-  - `SUPABASE_ANON_KEY` - Public anonymous key
-  - `SUPABASE_SERVICE_ROLE_KEY` - Server-side key (keep secret)
-
-### 3. Google OAuth Credentials (Required for Google Sign-In)
-- **Purpose**: Allow users to sign in with their Google account
-- **Get it from**: https://console.cloud.google.com/apis/credentials
-- **Required credentials**:
-  - `GOOGLE_WEB_CLIENT_ID` - For web/Expo Go testing
-  - `GOOGLE_ANDROID_CLIENT_ID` - For Android builds
-  - `GOOGLE_IOS_CLIENT_ID` - For iOS builds
-
-### 4. RevenueCat Credentials (Required for Payments)
-- **Purpose**: Handle subscriptions and in-app purchases
-- **Get it from**: https://app.revenuecat.com/
-- **Required credentials**:
-  - `REVENUECAT_API_KEY` - Public SDK key
-  - `REVENUECAT_APPLE_API_KEY` - For iOS App Store
-  - `REVENUECAT_GOOGLE_API_KEY` - For Google Play Store
-
----
-
-## Environment Configuration
-
-### Backend Environment (`/app/backend/.env`)
+### Backend (.env)
 
 ```env
-# MongoDB Connection
-MONGO_URL="mongodb://localhost:27017"
-DB_NAME="skillgpt_db"
+# MongoDB (Already configured in container)
+MONGO_URL=mongodb://localhost:27017/habitgpt_db
+DB_NAME=habitgpt_db
 
-# Google Gemini API Key (Required for AI features)
-# Get your key at: https://aistudio.google.com/app/apikey
-GEMINI_API_KEY="YOUR_GEMINI_API_KEY"
+# Gemini AI (Required for habit coaching)
+GEMINI_API_KEY=your_gemini_api_key
 
-# Supabase Configuration (Required for authentication)
-# Get from: https://supabase.com/dashboard/project/YOUR_PROJECT/settings/api
-SUPABASE_URL="https://your-project.supabase.co"
-SUPABASE_ANON_KEY="your-anon-key"
-SUPABASE_SERVICE_ROLE_KEY="your-service-role-key"
-
-# Google OAuth Configuration (Required for Google Sign-In)
-# Get from: https://console.cloud.google.com/apis/credentials
-GOOGLE_WEB_CLIENT_ID="your-web-client-id.apps.googleusercontent.com"
-GOOGLE_ANDROID_CLIENT_ID="your-android-client-id.apps.googleusercontent.com"
-GOOGLE_IOS_CLIENT_ID="your-ios-client-id.apps.googleusercontent.com"
-
-# RevenueCat Configuration (Required for payments/subscriptions)
-# Get from: https://app.revenuecat.com/
-REVENUECAT_API_KEY="your-revenuecat-public-key"
-REVENUECAT_APPLE_API_KEY="your-apple-api-key"
-REVENUECAT_GOOGLE_API_KEY="your-google-api-key"
+# RevenueCat Webhook Secret (Optional)
+REVENUECAT_WEBHOOK_SECRET=your_webhook_secret
 ```
 
-### Frontend Environment (`/app/frontend/.env`)
+### Frontend (.env)
 
 ```env
-# Expo Configuration (Auto-configured, do not modify)
-EXPO_TUNNEL_SUBDOMAIN=your-subdomain
-EXPO_PACKAGER_HOSTNAME=https://dailyroute-1.preview.emergentagent.com
-EXPO_PUBLIC_BACKEND_URL=https://dailyroute-1.preview.emergentagent.com
+# API Configuration
+EXPO_PUBLIC_BACKEND_URL=http://localhost:8001
 
-# Supabase Configuration
-EXPO_PUBLIC_SUPABASE_URL="https://your-project.supabase.co"
-EXPO_PUBLIC_SUPABASE_ANON_KEY="your-anon-key"
+# Supabase (Optional - for Google Auth)
+EXPO_PUBLIC_SUPABASE_URL=your_supabase_url
+EXPO_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
 
-# Google OAuth Configuration
-EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID="your-web-client-id.apps.googleusercontent.com"
-EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID="your-android-client-id.apps.googleusercontent.com"
-EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID="your-ios-client-id.apps.googleusercontent.com"
+# Google OAuth Client IDs
+EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID=your_web_client_id
+EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID=your_android_client_id
+EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID=your_ios_client_id
 
-# RevenueCat Configuration
-EXPO_PUBLIC_REVENUECAT_API_KEY="your-revenuecat-public-key"
+# RevenueCat
+EXPO_PUBLIC_REVENUECAT_IOS_KEY=appl_your_ios_key
+EXPO_PUBLIC_REVENUECAT_ANDROID_KEY=goog_your_android_key
 ```
 
 ---
 
-## Supabase Setup & SQL Schemas
+## 2. Supabase Setup
 
-### Step 1: Create a Supabase Project
+### Create a Supabase Project
 
-1. Go to https://supabase.com/dashboard
-2. Click "New Project"
-3. Choose organization and enter project details
-4. Wait for project to initialize
+1. Go to [supabase.com](https://supabase.com)
+2. Create a new project
+3. Note your project URL and anon key
 
-### Step 2: Run SQL Schemas
+### SQL Schema Setup
 
-Go to **SQL Editor** in Supabase Dashboard and run the following schemas:
+Run these SQL commands in Supabase SQL Editor to create the required tables:
 
 ```sql
--- ============================================
--- SKILLGPT DATABASE SCHEMA FOR SUPABASE
--- ============================================
-
 -- Enable UUID extension
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
--- ============================================
--- USERS TABLE
--- ============================================
-CREATE TABLE users (
+-- Users table
+CREATE TABLE IF NOT EXISTS users (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    email VARCHAR(255) UNIQUE NOT NULL,
-    name VARCHAR(255) NOT NULL,
-    google_id VARCHAR(255) UNIQUE,
+    email TEXT UNIQUE NOT NULL,
+    name TEXT NOT NULL,
+    google_id TEXT UNIQUE,
     avatar_url TEXT,
     onboarding_completed BOOLEAN DEFAULT FALSE,
     onboarding_profile_id UUID,
     trial_started BOOLEAN DEFAULT FALSE,
-    trial_start_date TIMESTAMP WITH TIME ZONE,
+    trial_start_date TIMESTAMPTZ,
     subscription_active BOOLEAN DEFAULT FALSE,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Index for faster email lookups
-CREATE INDEX idx_users_email ON users(email);
-CREATE INDEX idx_users_google_id ON users(google_id);
-
--- ============================================
--- ONBOARDING PROFILES TABLE
--- ============================================
-CREATE TABLE onboarding_profiles (
+-- Onboarding profiles table (HabitGPT specific)
+CREATE TABLE IF NOT EXISTS onboarding_profiles (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     user_id UUID REFERENCES users(id) ON DELETE CASCADE,
-    user_role VARCHAR(50) NOT NULL,
-    -- Options: school_student, college_student, working_professional, freelancer, unemployed, other
-    age_range VARCHAR(20) NOT NULL,
-    -- Options: under_16, 16_18, 19_22, 23_30, 31_45, 45_plus
-    country VARCHAR(100) NOT NULL,
-    timezone VARCHAR(100) NOT NULL,
-    daily_time_minutes INTEGER NOT NULL,
-    -- Options: 30, 60, 120, 180+
-    learning_preferences TEXT[] NOT NULL,
-    -- Options: videos, articles, hands_on, quizzes, step_by_step
-    learning_history_type VARCHAR(50) NOT NULL,
-    -- Options: first_time, quit_midway, completed_one, independent
-    motivation_type VARCHAR(50) NOT NULL,
-    -- Options: career, personal_growth, academic, hobby, social
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    primary_change_domain TEXT NOT NULL, -- sleep_energy, focus_productivity, health_fitness, etc.
+    failure_patterns TEXT[] DEFAULT '{}', -- mornings, evenings, weekends, etc.
+    baseline_consistency_level TEXT NOT NULL, -- very_inconsistent, somewhat_inconsistent, etc.
+    primary_obstacle TEXT NOT NULL, -- lack_motivation, forgetting, poor_planning, etc.
+    max_daily_effort_minutes INTEGER DEFAULT 10, -- 5, 10, 20, 30
+    miss_response_type TEXT NOT NULL, -- guilty_give_up, try_again, ignore_drift, depends
+    coach_style_preference TEXT DEFAULT 'adaptive', -- gentle, structured, strict, adaptive
+    created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Index for user lookup
-CREATE INDEX idx_onboarding_user_id ON onboarding_profiles(user_id);
-
--- ============================================
--- SKILL INSTANCES TABLE
--- ============================================
-CREATE TABLE skill_instances (
+-- Habit instances table
+CREATE TABLE IF NOT EXISTS habit_instances (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    user_id UUID REFERENCES users(id) ON DELETE CASCADE NOT NULL,
-    skill_name VARCHAR(255) NOT NULL,
-    skill_description TEXT,
-    category VARCHAR(100) NOT NULL,
-    duration_days INTEGER DEFAULT 90,
-    start_date TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    end_date TIMESTAMP WITH TIME ZONE,
-    status VARCHAR(20) DEFAULT 'active',
-    -- Options: active, completed, paused, abandoned
-    completion_percentage DECIMAL(5,2) DEFAULT 0.00,
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    habit_name TEXT NOT NULL,
+    habit_description TEXT,
+    category TEXT NOT NULL,
+    duration_days INTEGER DEFAULT 29,
+    start_date TIMESTAMPTZ DEFAULT NOW(),
+    end_date TIMESTAMPTZ,
+    status TEXT DEFAULT 'active', -- active, completed, paused
+    completion_percentage FLOAT DEFAULT 0,
+    current_streak INTEGER DEFAULT 0,
+    longest_streak INTEGER DEFAULT 0,
+    last_completed_date TIMESTAMPTZ,
     roadmap JSONB,
-    -- Stores the full roadmap structure
     chat_history JSONB DEFAULT '[]',
-    -- Stores AI chat conversation
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Indexes for efficient queries
-CREATE INDEX idx_skill_instances_user_id ON skill_instances(user_id);
-CREATE INDEX idx_skill_instances_status ON skill_instances(status);
-CREATE INDEX idx_skill_instances_start_date ON skill_instances(start_date);
-
--- ============================================
--- DAILY TASKS TABLE
--- ============================================
-CREATE TABLE daily_tasks (
+-- Subscriptions table
+CREATE TABLE IF NOT EXISTS subscriptions (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    skill_instance_id UUID REFERENCES skill_instances(id) ON DELETE CASCADE NOT NULL,
-    day_number INTEGER NOT NULL,
-    title VARCHAR(255) NOT NULL,
-    description TEXT,
-    estimated_minutes INTEGER DEFAULT 30,
-    resource_links TEXT[],
-    completed BOOLEAN DEFAULT FALSE,
-    completed_at TIMESTAMP WITH TIME ZONE,
-    rolled_over_from INTEGER,
-    -- If task was rolled over from previous day
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    user_id UUID UNIQUE NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    is_subscribed BOOLEAN DEFAULT FALSE,
+    is_trial_active BOOLEAN DEFAULT FALSE,
+    trial_end_date TIMESTAMPTZ,
+    subscription_end_date TIMESTAMPTZ,
+    product_id TEXT,
+    will_renew BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Indexes for efficient queries
-CREATE INDEX idx_daily_tasks_skill_instance ON daily_tasks(skill_instance_id);
-CREATE INDEX idx_daily_tasks_day_number ON daily_tasks(day_number);
-CREATE INDEX idx_daily_tasks_completed ON daily_tasks(completed);
-
--- ============================================
--- RESOURCES TABLE
--- ============================================
-CREATE TABLE resources (
+-- Notification preferences table
+CREATE TABLE IF NOT EXISTS notification_preferences (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    skill_instance_id UUID REFERENCES skill_instances(id) ON DELETE CASCADE NOT NULL,
-    type VARCHAR(50) NOT NULL,
-    -- Options: youtube, article, document, course
-    title VARCHAR(255) NOT NULL,
-    url TEXT NOT NULL,
-    description TEXT,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-);
-
--- Index for skill instance lookup
-CREATE INDEX idx_resources_skill_instance ON resources(skill_instance_id);
-
--- ============================================
--- MILESTONES TABLE
--- ============================================
-CREATE TABLE milestones (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    skill_instance_id UUID REFERENCES skill_instances(id) ON DELETE CASCADE NOT NULL,
-    day_number INTEGER NOT NULL,
-    title VARCHAR(255) NOT NULL,
-    description TEXT,
-    achieved BOOLEAN DEFAULT FALSE,
-    achieved_at TIMESTAMP WITH TIME ZONE,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-);
-
--- Index for skill instance lookup
-CREATE INDEX idx_milestones_skill_instance ON milestones(skill_instance_id);
-
--- ============================================
--- PAYMENTS TABLE (for RevenueCat tracking)
--- ============================================
-CREATE TABLE payments (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    user_id UUID REFERENCES users(id) ON DELETE CASCADE NOT NULL,
-    revenuecat_customer_id VARCHAR(255),
-    subscription_status VARCHAR(50),
-    -- Options: trial, active, expired, cancelled
-    product_id VARCHAR(255),
-    trial_end_date TIMESTAMP WITH TIME ZONE,
-    subscription_end_date TIMESTAMP WITH TIME ZONE,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-);
-
--- Index for user lookup
-CREATE INDEX idx_payments_user_id ON payments(user_id);
-
--- ============================================
--- NOTIFICATION PREFERENCES TABLE
--- ============================================
-CREATE TABLE notification_preferences (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    user_id UUID REFERENCES users(id) ON DELETE CASCADE NOT NULL UNIQUE,
+    user_id UUID UNIQUE NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     push_token TEXT,
-    platform VARCHAR(20), -- ios, android
+    platform TEXT, -- ios, android
     daily_reminders BOOLEAN DEFAULT TRUE,
-    morning_time TIME DEFAULT '09:00:00',
-    afternoon_time TIME DEFAULT '14:00:00',
-    evening_time TIME DEFAULT '20:00:00',
+    morning_time TEXT DEFAULT '09:00',
+    afternoon_time TEXT DEFAULT '14:00',
+    evening_time TEXT DEFAULT '20:00',
     milestone_alerts BOOLEAN DEFAULT TRUE,
     streak_notifications BOOLEAN DEFAULT TRUE,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Index for user lookup
-CREATE INDEX idx_notification_preferences_user_id ON notification_preferences(user_id);
+-- Create indexes for better query performance
+CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
+CREATE INDEX IF NOT EXISTS idx_users_google_id ON users(google_id);
+CREATE INDEX IF NOT EXISTS idx_onboarding_profiles_user_id ON onboarding_profiles(user_id);
+CREATE INDEX IF NOT EXISTS idx_habit_instances_user_id ON habit_instances(user_id);
+CREATE INDEX IF NOT EXISTS idx_habit_instances_status ON habit_instances(status);
+CREATE INDEX IF NOT EXISTS idx_subscriptions_user_id ON subscriptions(user_id);
 
--- ============================================
--- ROW LEVEL SECURITY (RLS) POLICIES
--- ============================================
-
--- Enable RLS on all tables
+-- Row Level Security (RLS) Policies
 ALTER TABLE users ENABLE ROW LEVEL SECURITY;
 ALTER TABLE onboarding_profiles ENABLE ROW LEVEL SECURITY;
-ALTER TABLE skill_instances ENABLE ROW LEVEL SECURITY;
-ALTER TABLE daily_tasks ENABLE ROW LEVEL SECURITY;
-ALTER TABLE resources ENABLE ROW LEVEL SECURITY;
-ALTER TABLE milestones ENABLE ROW LEVEL SECURITY;
-ALTER TABLE payments ENABLE ROW LEVEL SECURITY;
+ALTER TABLE habit_instances ENABLE ROW LEVEL SECURITY;
+ALTER TABLE subscriptions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE notification_preferences ENABLE ROW LEVEL SECURITY;
 
--- Users can only read/update their own data
-CREATE POLICY "Users can view own profile" ON users
-    FOR SELECT USING (auth.uid()::text = id::text);
+-- Users can read/update their own data
+CREATE POLICY "Users can read own data" ON users
+    FOR SELECT USING (auth.uid() = id);
 
-CREATE POLICY "Users can update own profile" ON users
-    FOR UPDATE USING (auth.uid()::text = id::text);
+CREATE POLICY "Users can update own data" ON users
+    FOR UPDATE USING (auth.uid() = id);
 
--- Onboarding profiles - users can only access their own
-CREATE POLICY "Users can view own onboarding" ON onboarding_profiles
-    FOR SELECT USING (user_id::text = auth.uid()::text);
+-- Onboarding profiles policies
+CREATE POLICY "Users can read own onboarding profile" ON onboarding_profiles
+    FOR SELECT USING (auth.uid() = user_id);
 
-CREATE POLICY "Users can insert own onboarding" ON onboarding_profiles
-    FOR INSERT WITH CHECK (user_id::text = auth.uid()::text);
+CREATE POLICY "Users can insert own onboarding profile" ON onboarding_profiles
+    FOR INSERT WITH CHECK (auth.uid() = user_id);
 
-CREATE POLICY "Users can update own onboarding" ON onboarding_profiles
-    FOR UPDATE USING (user_id::text = auth.uid()::text);
+CREATE POLICY "Users can update own onboarding profile" ON onboarding_profiles
+    FOR UPDATE USING (auth.uid() = user_id);
 
--- Skill instances - users can only access their own
-CREATE POLICY "Users can view own skills" ON skill_instances
-    FOR SELECT USING (user_id::text = auth.uid()::text);
+-- Habit instances policies
+CREATE POLICY "Users can read own habits" ON habit_instances
+    FOR SELECT USING (auth.uid() = user_id);
 
-CREATE POLICY "Users can insert own skills" ON skill_instances
-    FOR INSERT WITH CHECK (user_id::text = auth.uid()::text);
+CREATE POLICY "Users can insert own habits" ON habit_instances
+    FOR INSERT WITH CHECK (auth.uid() = user_id);
 
-CREATE POLICY "Users can update own skills" ON skill_instances
-    FOR UPDATE USING (user_id::text = auth.uid()::text);
+CREATE POLICY "Users can update own habits" ON habit_instances
+    FOR UPDATE USING (auth.uid() = user_id);
 
-CREATE POLICY "Users can delete own skills" ON skill_instances
-    FOR DELETE USING (user_id::text = auth.uid()::text);
+CREATE POLICY "Users can delete own habits" ON habit_instances
+    FOR DELETE USING (auth.uid() = user_id);
 
--- Daily tasks - users can access tasks from their skill instances
-CREATE POLICY "Users can view own tasks" ON daily_tasks
-    FOR SELECT USING (
-        skill_instance_id IN (
-            SELECT id FROM skill_instances WHERE user_id::text = auth.uid()::text
-        )
-    );
+-- Subscriptions policies
+CREATE POLICY "Users can read own subscription" ON subscriptions
+    FOR SELECT USING (auth.uid() = user_id);
 
-CREATE POLICY "Users can update own tasks" ON daily_tasks
-    FOR UPDATE USING (
-        skill_instance_id IN (
-            SELECT id FROM skill_instances WHERE user_id::text = auth.uid()::text
-        )
-    );
+-- Notification preferences policies
+CREATE POLICY "Users can read own notifications" ON notification_preferences
+    FOR SELECT USING (auth.uid() = user_id);
 
--- ============================================
--- TRIGGER FOR UPDATED_AT
--- ============================================
-CREATE OR REPLACE FUNCTION update_updated_at_column()
-RETURNS TRIGGER AS $$
-BEGIN
-    NEW.updated_at = NOW();
-    RETURN NEW;
-END;
-$$ language 'plpgsql';
-
-CREATE TRIGGER update_users_updated_at
-    BEFORE UPDATE ON users
-    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
-
-CREATE TRIGGER update_onboarding_profiles_updated_at
-    BEFORE UPDATE ON onboarding_profiles
-    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
-
-CREATE TRIGGER update_skill_instances_updated_at
-    BEFORE UPDATE ON skill_instances
-    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
-
-CREATE TRIGGER update_payments_updated_at
-    BEFORE UPDATE ON payments
-    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
-
-CREATE TRIGGER update_notification_preferences_updated_at
-    BEFORE UPDATE ON notification_preferences
-    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+CREATE POLICY "Users can update own notifications" ON notification_preferences
+    FOR UPDATE USING (auth.uid() = user_id);
 ```
-
-### Step 3: Configure Authentication
-
-1. Go to **Authentication** > **Providers** in Supabase Dashboard
-2. Enable **Google** provider
-3. Add your Google OAuth credentials:
-   - Client ID (Web)
-   - Client Secret
-4. Add authorized redirect URLs:
-   - `https://your-project.supabase.co/auth/v1/callback`
-   - `exp://your-expo-url`
 
 ---
 
-## Google OAuth Setup
+## 3. RevenueCat Setup
 
-### Step 1: Create Google Cloud Project
+### Create RevenueCat Account
 
-1. Go to https://console.cloud.google.com/
-2. Create a new project or select existing
-3. Enable **Google+ API** and **Google Identity Services**
+1. Go to [revenuecat.com](https://www.revenuecat.com)
+2. Create a new project called "HabitGPT"
 
-### Step 2: Configure OAuth Consent Screen
+### Configure Products
 
-1. Go to **APIs & Services** > **OAuth consent screen**
-2. Choose **External** user type
-3. Fill in app information:
-   - App name: "SkillGPT"
-   - User support email
-   - Developer contact email
-4. Add scopes:
-   - `email`
-   - `profile`
-   - `openid`
+Create these products in App Store Connect / Google Play Console:
 
-### Step 3: Create OAuth Credentials
+| Product ID | Name | Price | Duration |
+|------------|------|-------|----------|
+| `habitgpt_monthly_1999` | HabitGPT Monthly | $19.99 | Monthly |
+| `habitgpt_yearly_15999` | HabitGPT Yearly | $159.99 | Yearly |
 
-1. Go to **APIs & Services** > **Credentials**
-2. Click **Create Credentials** > **OAuth client ID**
-3. Create THREE client IDs:
+### RevenueCat Configuration
 
-**Web Application:**
-- Application type: Web application
-- Name: "SkillGPT Web"
-- Authorized JavaScript origins: Your Expo/app URLs
+1. **Add iOS App:**
+   - Bundle ID: `com.yourcompany.habitgpt`
+   - App Store Connect API Key
+
+2. **Add Android App:**
+   - Package Name: `com.yourcompany.habitgpt`
+   - Google Play Service Account JSON
+
+3. **Create Entitlement:**
+   - Identifier: `premium`
+   - Attach both products to this entitlement
+
+4. **Create Offering:**
+   - Identifier: `default`
+   - Add Monthly and Yearly packages
+
+5. **Webhook Configuration:**
+   - URL: `https://your-backend-url/api/webhooks/revenuecat`
+   - Events: All subscription events
+
+### Get API Keys
+
+Copy these keys to your `.env`:
+- iOS: App Settings → API Keys → iOS key
+- Android: App Settings → API Keys → Android key
+
+---
+
+## 4. Google Authentication
+
+### Create Google Cloud Project
+
+1. Go to [console.cloud.google.com](https://console.cloud.google.com)
+2. Create a new project: "HabitGPT"
+
+### Enable APIs
+
+- Google+ API
+- Google Identity Services API
+
+### Create OAuth Credentials
+
+**Web Client:**
+- Authorized JavaScript origins: Your frontend URL
 - Authorized redirect URIs: Your Supabase callback URL
 
-**Android:**
-- Application type: Android
-- Name: "SkillGPT Android"
-- Package name: Your app's package name (from app.json)
-- SHA-1 certificate fingerprint: Run `expo credentials:manager`
+**Android Client:**
+- Package name: `com.yourcompany.habitgpt`
+- SHA-1 certificate fingerprint (from `keytool`)
 
-**iOS:**
-- Application type: iOS
-- Name: "SkillGPT iOS"
-- Bundle ID: Your app's bundle identifier (from app.json)
+**iOS Client:**
+- Bundle ID: `com.yourcompany.habitgpt`
 
----
+### Supabase Google Provider
 
-## RevenueCat Setup
-
-SkillGPT uses RevenueCat for subscription management with a **free trial** model.
-
-### Pricing Model
-
-| Plan | Price | Trial | Auto-Renew |
-|------|-------|-------|------------|
-| **Monthly** | $19.99/month | First month FREE | Yes |
-| **Yearly** | $159.99/year | First month FREE | Yes |
-
-### Payment Flow
-
-1. User creates a skill roadmap
-2. Roadmap screen shows **blurred content** with paywall overlay
-3. User selects Monthly or Yearly plan
-4. First payment is **$0** (free trial)
-5. After 30 days, auto-pay charges the selected amount
-6. If payment fails, content is blurred again until resolved
-
-### Step 1: Create RevenueCat Account
-
-1. Go to https://app.revenuecat.com/
-2. Sign up and create a new project named "SkillGPT"
-3. Note your **Project ID**
-
-### Step 2: Create Products in App Store Connect (iOS)
-
-1. Go to **App Store Connect** > **My Apps** > Your App
-2. Navigate to **Subscriptions**
-3. Create a **Subscription Group** called "SkillGPT Premium"
-4. Add subscriptions:
-
-**Monthly Subscription:**
-- Reference Name: SkillGPT Monthly
-- Product ID: `skillgpt_monthly_1999`
-- Duration: 1 Month
-- Price: $19.99
-- Introductory Offer: Free Trial, 1 Month
-
-**Yearly Subscription:**
-- Reference Name: SkillGPT Yearly
-- Product ID: `skillgpt_yearly_15999`
-- Duration: 1 Year
-- Price: $159.99
-- Introductory Offer: Free Trial, 1 Month
-
-### Step 3: Create Products in Google Play Console (Android)
-
-1. Go to **Google Play Console** > Your App
-2. Navigate to **Monetization** > **Subscriptions**
-3. Create subscriptions:
-
-**Monthly:**
-- Product ID: `skillgpt_monthly_1999`
-- Billing Period: Monthly
-- Price: $19.99
-- Free Trial: 30 days
-
-**Yearly:**
-- Product ID: `skillgpt_yearly_15999`
-- Billing Period: Yearly
-- Price: $159.99
-- Free Trial: 30 days
-
-### Step 4: Configure RevenueCat Products
-
-1. In RevenueCat Dashboard, go to **Products**
-2. Add both App Store and Play Store products
-3. Create an **Entitlement** called `premium`
-4. Attach both products to this entitlement
-
-### Step 5: Create Offerings
-
-1. Go to **Offerings** in RevenueCat
-2. Create a **Default Offering** with:
-   - Monthly package → `skillgpt_monthly_1999`
-   - Annual package → `skillgpt_yearly_15999`
-
-### Step 6: Get API Keys
-
-1. Go to **Project Settings** > **API Keys**
-2. Copy:
-   - **iOS Public Key** (starts with `appl_`)
-   - **Android Public Key** (starts with `goog_`)
-
-### Step 7: Configure Webhooks
-
-1. Go to **Project Settings** > **Integrations** > **Webhooks**
-2. Add webhook URL: `https://your-backend.com/api/webhooks/revenuecat`
-3. Enable events:
-   - `INITIAL_PURCHASE`
-   - `RENEWAL`
-   - `CANCELLATION`
-   - `EXPIRATION`
-   - `BILLING_ISSUE`
-   - `PRODUCT_CHANGE`
-
-### Step 8: Update Environment Variables
-
-**Backend `/app/backend/.env`:**
-```env
-REVENUECAT_WEBHOOK_SECRET="your-webhook-secret"
-```
-
-**Frontend `/app/frontend/.env`:**
-```env
-EXPO_PUBLIC_REVENUECAT_IOS_KEY="appl_your_ios_key"
-EXPO_PUBLIC_REVENUECAT_ANDROID_KEY="goog_your_android_key"
-```
-
-### Backend Subscription APIs
-
-```
-GET /api/users/{user_id}/subscription
-  Returns current subscription status
-
-PUT /api/users/{user_id}/subscription
-  Updates subscription status (called from app after purchase)
-
-POST /api/webhooks/revenuecat
-  Handles RevenueCat webhook events for real-time updates
-```
-
-### Subscription Flow Diagram
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│                    SUBSCRIPTION FLOW                         │
-├─────────────────────────────────────────────────────────────┤
-│                                                              │
-│  1. User creates skill → Roadmap generated                  │
-│                     │                                        │
-│                     ▼                                        │
-│  2. Roadmap screen BLURRED + Paywall overlay                │
-│                     │                                        │
-│                     ▼                                        │
-│  3. User selects plan (Monthly $19.99 / Yearly $159.99)     │
-│                     │                                        │
-│                     ▼                                        │
-│  4. RevenueCat processes payment ($0 for first month)       │
-│                     │                                        │
-│         ┌──────────┴──────────┐                             │
-│         ▼                     ▼                             │
-│    SUCCESS               CANCELLED                          │
-│         │                     │                             │
-│         ▼                     ▼                             │
-│  5a. Blur removed       5b. Stay blurred                    │
-│      User can learn         Return to paywall               │
-│                                                              │
-│  6. After 30 days → Auto-charge                             │
-│                     │                                        │
-│         ┌──────────┴──────────┐                             │
-│         ▼                     ▼                             │
-│    PAYMENT OK           PAYMENT FAILED                      │
-│         │                     │                             │
-│         ▼                     ▼                             │
-│  Continue access        Content BLURRED                     │
-│                         Show payment prompt                 │
-│                                                              │
-└─────────────────────────────────────────────────────────────┘
-```
-
-### Testing Subscriptions
-
-**Sandbox Testing (iOS):**
-1. Create Sandbox Tester in App Store Connect
-2. Sign out of App Store on device
-3. Use sandbox account when prompted
-
-**Test Environment (Android):**
-1. Add test accounts in Google Play Console
-2. License testing returns success for any card
+1. Go to Authentication → Providers → Google
+2. Enable Google provider
+3. Add Client ID and Client Secret from Google Cloud
 
 ---
 
-## Push Notifications Setup
+## 5. Gemini AI Setup
 
-SkillGPT uses Expo Notifications for push notifications. Users receive **3 daily reminders** to complete their tasks.
+### Get Gemini API Key
 
-### How It Works
+1. Go to [aistudio.google.com](https://aistudio.google.com)
+2. Create an API key
+3. Add to backend `.env` as `GEMINI_API_KEY`
 
-1. **Morning Reminder** (default 9:00 AM) - "Good Morning! Time to Learn"
-2. **Afternoon Reminder** (default 2:00 PM) - "Afternoon Check-in"
-3. **Evening Reminder** (default 8:00 PM) - "Evening Reminder"
+### Model Configuration
 
-### Local Scheduling
-
-Notifications are scheduled **locally on the device** using Expo's notification system:
-- No external push notification service required for daily reminders
-- Notifications persist even when app is closed
-- Users can customize reminder times in Settings
-
-### Backend Integration
-
-The backend stores notification preferences and push tokens for future server-side push notifications:
-
-**Database Schema (MongoDB):**
-```javascript
-{
-  id: "uuid",
-  user_id: "user_uuid",
-  push_token: "ExponentPushToken[xxx]",
-  platform: "ios" | "android",
-  daily_reminders: true,
-  morning_time: "09:00",
-  afternoon_time: "14:00",
-  evening_time: "20:00",
-  milestone_alerts: true,
-  streak_notifications: true
-}
-```
-
-### API Endpoints for Notifications
-
-```
-POST /api/notifications/register
-  Body: { user_id, push_token, platform }
-  Registers device for push notifications
-
-GET /api/notifications/preferences/{user_id}
-  Returns notification preferences
-
-PUT /api/notifications/preferences/{user_id}
-  Body: { daily_reminders?, morning_time?, afternoon_time?, evening_time? }
-  Updates notification preferences
-
-GET /api/notifications/pending-tasks/{user_id}
-  Returns count of incomplete tasks for today
-```
-
-### User Flow
-
-1. User logs in → App requests notification permissions
-2. Permission granted → Push token saved to backend
-3. Daily reminders scheduled locally at user's preferred times
-4. User can customize times in **Profile → Notifications**
-
-### Notification Settings Screen
-
-Accessible from: **Profile Tab → Notifications**
-
-Features:
-- Toggle daily reminders on/off
-- Set custom times for morning, afternoon, evening reminders
-- Send test notification
-- View scheduled notifications
-
-### For Server-Side Push (Future Enhancement)
-
-To send push notifications from your server (e.g., for milestone achievements):
-
-1. Collect Expo push tokens via `/api/notifications/register`
-2. Use Expo Push API: https://docs.expo.dev/push-notifications/sending-notifications/
-3. Send to `https://exp.host/--/api/v2/push/send`
-
-Example server-side push:
-```python
-import requests
-
-def send_push_notification(push_token, title, body):
-    response = requests.post(
-        'https://exp.host/--/api/v2/push/send',
-        json={
-            'to': push_token,
-            'title': title,
-            'body': body,
-            'sound': 'default',
-            'data': {'type': 'milestone_achieved'}
-        }
-    )
-    return response.json()
-```
+HabitGPT uses `gemini-2.5-flash` for:
+- Habit clarification conversations
+- 29-day roadmap generation
+- Personalized task creation
 
 ---
 
-## Running the Application
+## 6. Running the App
 
 ### Backend
 
 ```bash
-cd /app/backend
-
-# Install dependencies
+cd backend
 pip install -r requirements.txt
-
-# Start the server
 uvicorn server:app --host 0.0.0.0 --port 8001 --reload
 ```
 
 ### Frontend
 
 ```bash
-cd /app/frontend
-
-# Install dependencies
+cd frontend
 yarn install
-
-# Start Expo
-expo start --tunnel
+npx expo start
 ```
 
-### Testing on Device
+### Testing
 
-1. Download **Expo Go** on your iOS/Android device
-2. Scan the QR code from terminal or Expo Dev Tools
-3. The app will load on your device
+1. Scan QR code with Expo Go app
+2. Complete 7-step onboarding:
+   - Q1: What do you want to change? (sets habit domain)
+   - Q2: When do you fail? (predicts failure points)
+   - Q3: How consistent are you? (controls difficulty)
+   - Q4: What stops you? (maps to reminders)
+   - Q5: Daily effort available (sets task intensity)
+   - Q6: Miss response (defines recovery logic)
+   - Q7: Coach style (controls tone & notifications)
+3. Chat with HabitGPT to select a habit
+4. Start free trial and view 29-day roadmap
 
 ---
 
-## Feature Walkthrough
-
-### 1. Welcome Screen (`/`)
-
-**Purpose:** Introduction to the app and CTA to start
-
-**Elements:**
-- App logo and name
-- Tagline: "Master any skill in 90 days"
-- Feature highlights (AI Roadmaps, Daily Tasks, Progress Tracking)
-- "Get Started" button
-- Trial messaging
-
-**Flow:** Tap "Get Started" → Onboarding
-
----
-
-### 2. Onboarding (7 Questions)
-
-**Route:** `/onboarding/[step]` (steps 1-7)
-
-**Question 1 - Primary Role:**
-- School Student
-- College Student
-- Working Professional
-- Freelancer / Creator
-- Unemployed / Between Roles
-- Other
-
-**Question 2 - Age Range:**
-- Under 16
-- 16-18
-- 19-22
-- 23-30
-- 31-45
-- 45+
-
-**Question 3 - Location:**
-- Text input for country
-- Auto-detected timezone
-
-**Question 4 - Daily Time Commitment:**
-- 15-30 minutes
-- 30-60 minutes
-- 1-2 hours
-- 2+ hours
-
-**Question 5 - Learning Style (Multi-select):**
-- Watching videos
-- Reading articles/books
-- Hands-on tasks
-- Quizzes & tests
-- Step-by-step instructions
-
-**Question 6 - Prior Learning Experience:**
-- First time learning online
-- Usually quit midway
-- Completed at least one skill
-- Learn independently often
-
-**Question 7 - Motivation:**
-- Career / Money
-- Personal Growth
-- Academic Requirement
-- Hobby / Curiosity
-- Social / Confidence
-
-**Flow:** Complete all 7 → Authentication
-
----
-
-### 3. Authentication (`/auth`)
-
-**Purpose:** User sign-in after onboarding
-
-**Options:**
-- Google Sign-In (via Supabase)
-- Email/Name sign-in (MVP fallback)
-
-**Process:**
-1. User completes onboarding
-2. Onboarding profile saved to database
-3. User authenticates with Google
-4. User record created/updated
-5. Onboarding profile linked to user
-6. Redirect to Home
-
----
-
-### 4. Home Screen (`/(tabs)/home`)
-
-**Purpose:** Dashboard showing user's skills
-
-**Empty State:**
-- "Start Learning a New Skill" message
-- Central "+" FAB button
-- "Learn your first skill FREE for 90 days" banner
-
-**With Skills:**
-- Skill cards showing:
-  - Skill name and category
-  - Day X / 90
-  - Completion percentage
-  - Progress bar
-  - "Continue Learning" button
-- Long-press to delete skill
-
-**Flow:** Tap "+" → Skill Chat
-
----
-
-### 5. Skill Chat (`/skill-chat`)
-
-**Purpose:** AI-powered skill selection and disambiguation
-
-**Process:**
-1. User types desired skill (e.g., "cooking")
-2. AI asks clarifying questions:
-   - "What kind of cooking?" (General, Baking, Specific Cuisine, etc.)
-3. User selects option
-4. AI narrows down further if needed
-5. AI confirms final skill selection
-6. "Ready for Roadmap" state triggers
-
-**Example Flow:**
-```
-User: "I want to learn shooting"
-AI: "When you say 'shooting,' which do you mean?
-    1. Photography/videography
-    2. Archery
-    3. Firearms
-    4. Something else"
-User: "Firearms"
-AI: "Which category?
-    1. Handguns
-    2. Rifles
-    3. Shotguns
-    4. General firearms safety"
-User: "Handguns"
-AI: "What's your goal?
-    1. Safety & fundamentals
-    2. Competitive shooting
-    3. Tactical / defense
-    4. Hobby / range practice"
-User: "Safety & fundamentals"
-AI: "Perfect! You're about to start a 90-day plan for:
-    Handgun Shooting - Safety & Fundamentals
-    Confirm to generate your roadmap?"
-```
-
-**Flow:** AI confirms → Payment Screen
-
----
-
-### 6. Payment/Trial Screen (`/payment`)
-
-**Purpose:** Convert free trial, collect payment info
-
-**Elements:**
-- "Your First Skill is FREE!" header
-- Feature checklist
-- Pricing card:
-  - 90-Day Free Trial badge
-  - $19.99/month after trial
-  - Cancel anytime messaging
-- Payment method placeholder (RevenueCat)
-- "Start Learning Free" CTA
-
-**Process:**
-1. User sees trial offer
-2. Adds payment method (RevenueCat)
-3. Trial starts (90 days)
-4. Skill instance created
-5. Roadmap generated
-6. Redirect to Roadmap screen
-
----
-
-### 7. Skill Roadmap (`/skill-roadmap/[id]`)
-
-**Purpose:** Detailed view of learning plan
-
-**Tabs:**
-
-**Tasks Tab:**
-- Daily tasks list for selected day
-- Checkbox to complete tasks
-- Time estimate per task
-- Resource links (YouTube, articles)
-- Incomplete tasks roll over
-
-**Resources Tab:**
-- Curated learning resources
-- YouTube videos
-- Articles
-- Documents
-- External courses
-
-**Milestones Tab:**
-- Progress milestones (Day 7, 30, 60, 90)
-- Achievement descriptions
-- Completion status
-
-**Progress Timeline:**
-- Bar chart showing daily completion
-- Scroll through days
-- Visual progress indicator
-
-**Day Selector:**
-- Navigate between days
-- See date for each day
-- Track current day
-
----
-
-### 8. Profile Screen (`/(tabs)/profile`)
-
-**Purpose:** User settings and preferences
-
-**Sections:**
-
-**User Info:**
-- Name and email
-- Avatar
-
-**Learning Profile:**
-- Role
-- Daily time commitment
-- Location
-- Learning style preferences
-
-**Settings:**
-- Notifications
-- Subscription management
-- Help & Support
-- Terms & Privacy
-- Log Out
-
----
-
-## API Reference
-
-### Base URL
-```
-http://localhost:8001/api
-```
-
-### Endpoints
-
-#### Health Check
-```
-GET /api/
-GET /api/health
-```
-
-#### Users
-```
-POST /api/users
-  Body: { email, name, google_id?, avatar_url? }
-  Returns: User object
-
-GET /api/users/{user_id}
-  Returns: User object
-
-GET /api/users/email/{email}
-  Returns: User object
-
-PUT /api/users/{user_id}
-  Body: { ...updates }
-  Returns: Updated user object
-```
-
-#### Onboarding
-```
-POST /api/onboarding
-  Body: {
-    user_role, age_range, country, timezone,
-    daily_time_minutes, learning_preferences[],
-    learning_history_type, motivation_type
-  }
-  Returns: OnboardingProfile object
-
-GET /api/onboarding/{profile_id}
-  Returns: OnboardingProfile object
-
-PUT /api/onboarding/{profile_id}/link-user?user_id={user_id}
-  Links profile to authenticated user
-```
-
-#### Skill Chat
-```
-POST /api/skills/chat
-  Body: {
-    user_id, message, chat_history[],
-    skill_instance_id?
-  }
-  Returns: {
-    response: string,
-    ready_for_roadmap: boolean,
-    skill_name?: string,
-    category?: string
-  }
-```
-
-#### Skill Instances
-```
-POST /api/skills/instances
-  Body: {
-    user_id, skill_name, skill_description,
-    category, duration_days?
-  }
-  Returns: SkillInstance with generated roadmap
-
-GET /api/skills/instances/user/{user_id}
-  Returns: SkillInstance[]
-
-GET /api/skills/instances/{instance_id}
-  Returns: SkillInstance
-
-DELETE /api/skills/instances/{instance_id}
-  Deletes skill instance
-```
-
-#### Tasks
-```
-PUT /api/skills/instances/{instance_id}/tasks/complete
-  Body: { task_id, day_number }
-  Returns: { completion_percentage }
-
-GET /api/skills/instances/{instance_id}/daily-tasks/{day_number}
-  Returns: DayPlan with tasks
-```
-
-#### Trial
-```
-POST /api/users/{user_id}/start-trial
-  Starts 90-day free trial
-  Returns: { trial_end_date }
-```
+## Coach Style Configuration
+
+The app supports 4 coach styles that affect notifications and AI responses:
+
+| Style | Tone | Example Notification |
+|-------|------|---------------------|
+| Gentle | Warm, supportive | "Good morning! Ready to nurture your habit today? You've got this! 🌅" |
+| Structured | Professional, organized | "Morning check-in: Your habit is scheduled for today. Plan accordingly." |
+| Strict | Direct, no-nonsense | "Day started. Your habit awaits. Execute." |
+| Adaptive | Context-aware | "Based on your progress, today's a great day to build momentum." |
 
 ---
 
 ## Troubleshooting
 
-### "GEMINI_API_KEY not set" Warning
-- Ensure your Gemini API key is in `/app/backend/.env`
-- Restart the backend server after adding the key
+### Common Issues
 
-### Google Sign-In Not Working
-- Verify OAuth credentials in Supabase
-- Check redirect URIs match your app
-- Ensure Google provider is enabled in Supabase Auth
+1. **Gemini API errors**: Check API key is valid and has quota
+2. **RevenueCat products not showing**: Verify products in App Store Connect / Play Console
+3. **Google sign-in fails**: Check OAuth client IDs match platform
+4. **Notifications not working**: Ensure push token is registered
 
-### AI Chat Returns Errors
-- Check Gemini API key is valid
-- Verify you haven't exceeded API rate limits
-- Check backend logs for detailed errors
+### Support
 
-### Tasks Not Saving
-- Verify MongoDB is running
-- Check database connection string in `.env`
-- Look for errors in backend logs
-
-### App Not Loading on Device
-- Ensure device is on same network
-- Try using tunnel mode: `expo start --tunnel`
-- Clear Expo Go app cache
+For issues, check:
+- Backend logs: `tail -f /var/log/supervisor/backend.err.log`
+- Frontend logs: Metro bundler console
 
 ---
 
-## Project Structure
-
-```
-/app
-├── backend/
-│   ├── .env                 # Backend environment variables
-│   ├── server.py            # FastAPI application
-│   └── requirements.txt     # Python dependencies
-├── frontend/
-│   ├── .env                 # Frontend environment variables
-│   ├── app/                 # Expo Router screens
-│   │   ├── index.tsx        # Welcome screen
-│   │   ├── _layout.tsx      # Root layout
-│   │   ├── auth.tsx         # Authentication
-│   │   ├── skill-chat.tsx   # AI chat
-│   │   ├── payment.tsx      # Trial/payment
-│   │   ├── onboarding/
-│   │   │   └── [step].tsx   # Onboarding questions
-│   │   ├── skill-roadmap/
-│   │   │   └── [id].tsx     # Roadmap view
-│   │   └── (tabs)/
-│   │       ├── _layout.tsx  # Tab navigation
-│   │       ├── home.tsx     # Home screen
-│   │       └── profile.tsx  # Profile screen
-│   ├── src/
-│   │   ├── components/      # Reusable UI components
-│   │   ├── constants/       # Theme, colors
-│   │   ├── services/        # API client
-│   │   └── store/           # Zustand state management
-│   ├── app.json             # Expo configuration
-│   └── package.json         # Node dependencies
-├── SETUP.md                 # This file
-└── test_result.md           # Testing documentation
-```
-
----
-
-## Support
-
-For issues or questions:
-1. Check the troubleshooting section above
-2. Review backend logs: `tail -f /var/log/supervisor/backend.err.log`
-3. Review frontend logs: `tail -f /var/log/supervisor/expo.out.log`
-
----
-
-**Happy Learning with SkillGPT!**
+**Happy Habit Building with HabitGPT!**
