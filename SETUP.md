@@ -492,6 +492,106 @@ CREATE TRIGGER update_notification_preferences_updated_at
 
 ---
 
+## Push Notifications Setup
+
+SkillGPT uses Expo Notifications for push notifications. Users receive **3 daily reminders** to complete their tasks.
+
+### How It Works
+
+1. **Morning Reminder** (default 9:00 AM) - "Good Morning! Time to Learn"
+2. **Afternoon Reminder** (default 2:00 PM) - "Afternoon Check-in"
+3. **Evening Reminder** (default 8:00 PM) - "Evening Reminder"
+
+### Local Scheduling
+
+Notifications are scheduled **locally on the device** using Expo's notification system:
+- No external push notification service required for daily reminders
+- Notifications persist even when app is closed
+- Users can customize reminder times in Settings
+
+### Backend Integration
+
+The backend stores notification preferences and push tokens for future server-side push notifications:
+
+**Database Schema (MongoDB):**
+```javascript
+{
+  id: "uuid",
+  user_id: "user_uuid",
+  push_token: "ExponentPushToken[xxx]",
+  platform: "ios" | "android",
+  daily_reminders: true,
+  morning_time: "09:00",
+  afternoon_time: "14:00",
+  evening_time: "20:00",
+  milestone_alerts: true,
+  streak_notifications: true
+}
+```
+
+### API Endpoints for Notifications
+
+```
+POST /api/notifications/register
+  Body: { user_id, push_token, platform }
+  Registers device for push notifications
+
+GET /api/notifications/preferences/{user_id}
+  Returns notification preferences
+
+PUT /api/notifications/preferences/{user_id}
+  Body: { daily_reminders?, morning_time?, afternoon_time?, evening_time? }
+  Updates notification preferences
+
+GET /api/notifications/pending-tasks/{user_id}
+  Returns count of incomplete tasks for today
+```
+
+### User Flow
+
+1. User logs in → App requests notification permissions
+2. Permission granted → Push token saved to backend
+3. Daily reminders scheduled locally at user's preferred times
+4. User can customize times in **Profile → Notifications**
+
+### Notification Settings Screen
+
+Accessible from: **Profile Tab → Notifications**
+
+Features:
+- Toggle daily reminders on/off
+- Set custom times for morning, afternoon, evening reminders
+- Send test notification
+- View scheduled notifications
+
+### For Server-Side Push (Future Enhancement)
+
+To send push notifications from your server (e.g., for milestone achievements):
+
+1. Collect Expo push tokens via `/api/notifications/register`
+2. Use Expo Push API: https://docs.expo.dev/push-notifications/sending-notifications/
+3. Send to `https://exp.host/--/api/v2/push/send`
+
+Example server-side push:
+```python
+import requests
+
+def send_push_notification(push_token, title, body):
+    response = requests.post(
+        'https://exp.host/--/api/v2/push/send',
+        json={
+            'to': push_token,
+            'title': title,
+            'body': body,
+            'sound': 'default',
+            'data': {'type': 'milestone_achieved'}
+        }
+    )
+    return response.json()
+```
+
+---
+
 ## Running the Application
 
 ### Backend
