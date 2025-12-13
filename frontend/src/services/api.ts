@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { OnboardingProfile, User, SkillInstance, ChatMessage } from '../store/useStore';
+import { OnboardingProfile, User, HabitInstance, ChatMessage } from '../store/useStore';
 
 const API_URL = process.env.EXPO_PUBLIC_BACKEND_URL || '';
 
@@ -51,51 +51,51 @@ export const linkOnboardingToUser = async (profileId: string, userId: string): P
   await api.put(`/onboarding/${profileId}/link-user?user_id=${userId}`);
 };
 
-// Skill Chat APIs
-export const sendSkillChatMessage = async (
+// Habit Chat APIs
+export const sendHabitChatMessage = async (
   userId: string,
   message: string,
   chatHistory: ChatMessage[],
-  skillInstanceId?: string
+  habitInstanceId?: string
 ): Promise<{
   response: string;
   ready_for_roadmap: boolean;
-  skill_name?: string;
+  habit_name?: string;
   category?: string;
 }> => {
-  const response = await api.post('/skills/chat', {
+  const response = await api.post('/habits/chat', {
     user_id: userId,
     message,
     chat_history: chatHistory,
-    skill_instance_id: skillInstanceId,
+    habit_instance_id: habitInstanceId,
   });
   return response.data;
 };
 
-// Skill Instance APIs
-export const createSkillInstance = async (skillData: {
+// Habit Instance APIs
+export const createHabitInstance = async (habitData: {
   user_id: string;
-  skill_name: string;
-  skill_description: string;
+  habit_name: string;
+  habit_description: string;
   category: string;
   duration_days?: number;
-}): Promise<SkillInstance> => {
-  const response = await api.post('/skills/instances', skillData);
+}): Promise<HabitInstance> => {
+  const response = await api.post('/habits/instances', habitData);
   return response.data;
 };
 
-export const getUserSkillInstances = async (userId: string): Promise<SkillInstance[]> => {
-  const response = await api.get(`/skills/instances/user/${userId}`);
+export const getUserHabitInstances = async (userId: string): Promise<HabitInstance[]> => {
+  const response = await api.get(`/habits/instances/user/${userId}`);
   return response.data;
 };
 
-export const getSkillInstance = async (instanceId: string): Promise<SkillInstance> => {
-  const response = await api.get(`/skills/instances/${instanceId}`);
+export const getHabitInstance = async (instanceId: string): Promise<HabitInstance> => {
+  const response = await api.get(`/habits/instances/${instanceId}`);
   return response.data;
 };
 
-export const deleteSkillInstance = async (instanceId: string): Promise<void> => {
-  await api.delete(`/skills/instances/${instanceId}`);
+export const deleteHabitInstance = async (instanceId: string): Promise<void> => {
+  await api.delete(`/habits/instances/${instanceId}`);
 };
 
 // Task APIs
@@ -103,8 +103,8 @@ export const completeTask = async (
   instanceId: string,
   taskId: string,
   dayNumber: number
-): Promise<{ completion_percentage: number }> => {
-  const response = await api.put(`/skills/instances/${instanceId}/tasks/complete`, {
+): Promise<{ completion_percentage: number; current_streak: number }> => {
+  const response = await api.put(`/habits/instances/${instanceId}/tasks/complete`, {
     task_id: taskId,
     day_number: dayNumber,
   });
@@ -112,7 +112,7 @@ export const completeTask = async (
 };
 
 export const getDailyTasks = async (instanceId: string, dayNumber: number) => {
-  const response = await api.get(`/skills/instances/${instanceId}/daily-tasks/${dayNumber}`);
+  const response = await api.get(`/habits/instances/${instanceId}/daily-tasks/${dayNumber}`);
   return response.data;
 };
 
