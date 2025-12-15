@@ -14,7 +14,7 @@ import { useLocalSearchParams, router, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { BarChart } from 'react-native-gifted-charts';
 import { useStore, HabitInstance, DayPlan } from '../../src/store/useStore';
-import { getHabitInstance, completeTask, checkSubscriptionStatus } from '../../src/services/api';
+import { getHabitInstance, completeTask, checkSubscriptionStatus, updateHabitStartDate } from '../../src/services/api';
 import { TaskItem } from '../../src/components/TaskItem';
 import { PaywallOverlay } from '../../src/components/PaywallOverlay';
 import { hasActiveSubscription, syncSubscriptionWithBackend } from '../../src/services/revenuecat';
@@ -30,7 +30,7 @@ export default function HabitRoadmapScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [selectedDay, setSelectedDay] = useState<number>(1);
   const [activeTab, setActiveTab] = useState<'tasks' | 'resources' | 'milestones'>('tasks');
-  
+
   // Paywall states
   const [showPaywall, setShowPaywall] = useState(false);
   const [isFirstHabit, setIsFirstHabit] = useState(true);
@@ -58,7 +58,7 @@ export default function HabitRoadmapScreen() {
     // Check subscription status
     try {
       const hasSubscription = await hasActiveSubscription();
-      
+
       if (!hasSubscription) {
         // Check backend subscription status as backup
         if (user?.id) {
@@ -87,17 +87,35 @@ export default function HabitRoadmapScreen() {
     if (user?.id) {
       await syncSubscriptionWithBackend(user.id);
     }
-    
+
+    // Start the 29-day habit timeline now
+    if (id) {
+      try {
+        await updateHabitStartDate(id);
+        // Refresh habit to get new dates
+        await fetchHabit();
+      } catch (error) {
+        console.error('Failed to start habit timeline:', error);
+      }
+    }
+
     // Update local subscription status
     setSubscriptionStatus({
       isSubscribed: true,
       isTrialActive: isFirstHabit,
       willRenew: true,
     });
-    
+
     // Remove blur and hide paywall
     setShowPaywall(false);
     setContentBlurred(false);
+  };
+
+  const handlePaywallClose = () => {
+    // If user closes paywall without paying, go back to home/tabs
+    // This allows them to see their habit in the list (locked or free trial pending)
+    // and prevents getting stuck.
+    router.replace('/(tabs)/home');
   };
 
   const fetchHabit = async () => {
@@ -105,7 +123,7 @@ export default function HabitRoadmapScreen() {
     try {
       const instance = await getHabitInstance(id);
       setHabit(instance);
-      
+
       // Set selected day to current day of journey
       const startDate = new Date(instance.start_date);
       const today = new Date();
@@ -136,10 +154,18 @@ export default function HabitRoadmapScreen() {
 
   const handleTaskToggle = async (taskId: string) => {
     if (!habit || !id || contentBlurred) return;
-    
+
+    // Find current task status to determine new state
+    const currentDayPlan = habit.roadmap?.day_plans.find(dp => dp.day_number === selectedDay);
+    const currentTask = currentDayPlan?.tasks.find(t => t.id === taskId);
+
+    if (!currentTask) return;
+
+    const newCompleted = !currentTask.completed;
+
     try {
-      const result = await completeTask(id, taskId, selectedDay);
-      
+      const result = await completeTask(id, taskId, selectedDay, newCompleted);
+
       // Update local state
       if (habit.roadmap) {
         const updatedDayPlans = habit.roadmap.day_plans.map((dp) => {
@@ -167,7 +193,7 @@ export default function HabitRoadmapScreen() {
           },
         };
         setHabit(updatedHabit);
-        updateHabitInstance(id, { 
+        updateHabitInstance(id, {
           completion_percentage: result.completion_percentage,
           current_streak: result.current_streak,
         });
@@ -183,13 +209,13 @@ export default function HabitRoadmapScreen() {
 
   const getChartData = () => {
     if (!habit?.roadmap?.day_plans) return [];
-    
+
     const data = habit.roadmap.day_plans.slice(0, 14).map((dp) => ({
       value: dp.completion_percentage || 0,
       label: `${dp.day_number}`,
       frontColor: dp.day_number === selectedDay ? COLORS.primary : COLORS.border,
     }));
-    
+
     return data;
   };
 
@@ -222,10 +248,10 @@ export default function HabitRoadmapScreen() {
           </Text>
         </View>
         <View style={styles.streakBadge}>
-          <Ionicons 
-            name={habit.current_streak > 0 ? "flame" : "flame-outline"} 
-            size={18} 
-            color={habit.current_streak > 0 ? COLORS.secondary : COLORS.textMuted} 
+          <Ionicons
+            name={habit.current_streak > 0 ? "flame" : "flame-outline"}
+            size={18}
+            color={habit.current_streak > 0 ? COLORS.secondary : COLORS.textMuted}
           />
           <Text style={[
             styles.streakText,
@@ -425,6 +451,7 @@ export default function HabitRoadmapScreen() {
       <PaywallOverlay
         visible={showPaywall}
         onSuccess={handlePaywallSuccess}
+        onClose={handlePaywallClose}
         isFirstHabit={isFirstHabit}
       />
     </SafeAreaView>

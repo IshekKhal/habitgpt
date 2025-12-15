@@ -24,7 +24,16 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({
           </View>
         ) : (
           <Text style={[styles.text, isUser ? styles.userText : styles.assistantText]}>
-            {message}
+            {message.split(/(\*\*.*?\*\*)/g).map((part, index) => {
+              if (part.startsWith('**') && part.endsWith('**')) {
+                return (
+                  <Text key={index} style={{ fontWeight: 'bold' }}>
+                    {part.slice(2, -2)}
+                  </Text>
+                );
+              }
+              return <Text key={index}>{part}</Text>;
+            })}
           </Text>
         )}
       </View>
@@ -62,7 +71,7 @@ const styles = StyleSheet.create({
     lineHeight: 22,
   },
   userText: {
-    color: COLORS.textPrimary,
+    color: COLORS.textLight,
   },
   assistantText: {
     color: COLORS.textPrimary,

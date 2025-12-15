@@ -141,23 +141,32 @@ export const deleteHabitInstance = async (
   await api.delete(`/api/habits/instances/${instanceId}`);
 };
 
+export const updateHabitStartDate = async (
+  instanceId: string
+): Promise<void> => {
+  await api.put(`/api/habits/instances/${instanceId}/start`);
+};
+
 // ==================== TASK API ====================
 
 export const completeTask = async (
   instanceId: string,
   taskId: string,
-  dayNumber: number
+  dayNumber: number,
+  completed: boolean
 ): Promise<{
   status: string;
   completion_percentage: number;
   current_streak: number;
   longest_streak: number;
+  task_completed: boolean;
 }> => {
   const response = await api.put(
     `/api/habits/instances/${instanceId}/tasks/complete`,
     {
       task_id: taskId,
       day_number: dayNumber,
+      completed,
     }
   );
   return response.data;

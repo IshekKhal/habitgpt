@@ -42,6 +42,10 @@ else:
 # Create the main app
 app = FastAPI(title="HabitGPT API", version="1.0.0")
 
+@app.get("/")
+async def root():
+    return {"message": "HabitGPT API is running", "docs": "/docs"}
+
 # Create a router with the /api prefix
 api_router = APIRouter(prefix="/api")
 
@@ -155,8 +159,93 @@ class HabitInstanceCreate(BaseModel):
 class TaskCompletionRequest(BaseModel):
     task_id: str
     day_number: int
+    completed: Optional[bool] = True
 
-class RegisterPushTokenRequest(BaseModel):
+# ... (omitted sections)
+
+@api_router.put("/habits/instances/{instance_id}/tasks/complete")
+async def complete_task(instance_id: str, request: TaskCompletionRequest):
+    """Mark a task as completed/uncompleted and update streaks"""
+    if not supabase:
+        raise HTTPException(status_code=500, detail="Database not configured")
+    
+    try:
+        result = supabase.table('habit_instances').select('*').eq('id', instance_id).execute()
+        
+        if not result.data or len(result.data) == 0:
+            raise HTTPException(status_code=404, detail="Habit instance not found")
+        
+        habit_data = result.data[0]
+        roadmap = habit_data.get('roadmap', {})
+        
+        # Find and update the task
+        day_completed = False
+        if roadmap:
+            day_plans = roadmap.get('day_plans', [])
+            for day_plan in day_plans:
+                if day_plan.get('day_number') == request.day_number:
+                    for task in day_plan.get('tasks', []):
+                        if task.get('id') == request.task_id:
+                            # Use provided status or default to True (complete)
+                            task['completed'] = request.completed if request.completed is not None else True
+                            if task['completed']:
+                                task['completed_at'] = datetime.utcnow().isoformat()
+                            else:
+                                task.pop('completed_at', None)
+                            break
+                    
+                    # Calculate day completion
+                    tasks = day_plan.get('tasks', [])
+                    completed_tasks = sum(1 for t in tasks if t.get('completed'))
+                    day_plan['completion_percentage'] = (completed_tasks / len(tasks)) * 100 if tasks else 0
+                    day_completed = day_plan['completion_percentage'] >= 100
+                    break
+            
+            # Calculate overall completion
+            total_tasks = sum(len(dp.get('tasks', [])) for dp in day_plans)
+            completed_total = sum(sum(1 for t in dp.get('tasks', []) if t.get('completed')) for dp in day_plans)
+            completion_percentage = (completed_total / total_tasks) * 100 if total_tasks > 0 else 0
+        else:
+            completion_percentage = habit_data.get('completion_percentage', 0)
+        
+        # Update streak if day is fully completed
+        current_streak = habit_data.get('current_streak', 0) or 0
+        longest_streak = habit_data.get('longest_streak', 0) or 0
+        last_completed_date = habit_data.get('last_completed_date')
+        
+        if day_completed:
+            current_streak, longest_streak = calculate_streak(habit_data, True)
+            last_completed_date = datetime.utcnow().isoformat()
+        else:
+            # Re-calculate streak if unchecked? 
+            # Complex, but for now assuming streak logic is additive.
+            # If they uncheck the last task of the day, we theoretically should revert the streak.
+            # But calculating streak from history is missing here. Keeping simple for now.
+            pass
+        
+        # Update in database
+        update_data = {
+            'roadmap': roadmap,
+            'completion_percentage': completion_percentage,
+            'current_streak': current_streak,
+            'longest_streak': longest_streak,
+            'last_completed_date': last_completed_date,
+            'updated_at': datetime.utcnow().isoformat()
+        }
+        
+        supabase.table('habit_instances').update(update_data).eq('id', instance_id).execute()
+        
+        return {
+            "status": "success",
+            "completion_percentage": completion_percentage,
+            "current_streak": current_streak,
+            "longest_streak": longest_streak,
+            "task_completed": request.completed
+        }
+    except Exception as e:
+        logger.error(f"Failed to toggle task: {e}")
+        # Return 500 but with detail
+        raise HTTPException(status_code=500, detail=f"Server Error: {str(e)}")
     user_id: str
     push_token: str
     platform: str
@@ -181,7 +270,12 @@ class UpdateSubscriptionRequest(BaseModel):
 
 def get_gemini_model():
     """Get the Gemini model for chat"""
-    return genai.GenerativeModel('gemini-2.5-flash')
+    try:
+        # Use valid model name
+        return genai.GenerativeModel('gemini-flash-latest')
+    except Exception as e:
+        logger.error(f"Failed to initialize Gemini model: {e}")
+        raise HTTPException(status_code=500, detail=f"AI Model Error: {str(e)}")
 
 def generate_uuid() -> str:
     return str(uuid.uuid4())
@@ -560,30 +654,35 @@ async def habit_chat(request: ChatRequest):
     # Convert chat history to proper format
     chat_history = [{"role": msg.role, "content": msg.content} for msg in request.chat_history]
     
-    # Generate AI response
-    response = await generate_habit_clarification(request.message, chat_history, onboarding_profile)
-    
-    # Check if ready for roadmap
-    ready_for_roadmap = "[READY_FOR_ROADMAP" in response
-    habit_name = None
-    category = None
-    
-    if ready_for_roadmap:
-        try:
-            marker = response.split("[READY_FOR_ROADMAP:")[1].split("]")[0]
-            parts = marker.split(":")
-            habit_name = parts[0].strip()
-            category = parts[1].strip() if len(parts) > 1 else "other"
-            response = response.split("[READY_FOR_ROADMAP")[0].strip()
-        except:
-            ready_for_roadmap = False
-    
-    return {
-        "response": response,
-        "ready_for_roadmap": ready_for_roadmap,
-        "habit_name": habit_name,
-        "category": category
-    }
+    try:
+        # Generate AI response
+        response = await generate_habit_clarification(request.message, chat_history, onboarding_profile)
+        
+        # Check if ready for roadmap
+        ready_for_roadmap = "[READY_FOR_ROADMAP" in response
+        habit_name = None
+        category = None
+        
+        if ready_for_roadmap:
+            try:
+                marker = response.split("[READY_FOR_ROADMAP:")[1].split("]")[0]
+                parts = marker.split(":")
+                habit_name = parts[0].strip()
+                category = parts[1].strip() if len(parts) > 1 else "other"
+                response = response.split("[READY_FOR_ROADMAP")[0].strip()
+            except:
+                ready_for_roadmap = False
+        
+        return {
+            "response": response,
+            "ready_for_roadmap": ready_for_roadmap,
+            "habit_name": habit_name,
+            "category": category
+        }
+    except Exception as e:
+        logger.error(f"Chat generation failed: {e}")
+        # Return the actual error for debugging
+        raise HTTPException(status_code=500, detail=f"Chat Error: {str(e)}")
 
 # ==================== HABIT INSTANCE ROUTES ====================
 
@@ -752,6 +851,33 @@ async def get_daily_tasks(instance_id: str, day_number: int):
                 return day_plan
     
     raise HTTPException(status_code=404, detail="Day plan not found")
+
+@api_router.put("/habits/instances/{instance_id}/start")
+async def update_habit_start_date(instance_id: str):
+    """Reset the habit start date to now (e.g. after payment)"""
+    if not supabase:
+        raise HTTPException(status_code=500, detail="Database not configured")
+    
+    start_date = datetime.utcnow()
+    # Also update end_date to keep duration correct
+    
+    # First get duration
+    result = supabase.table('habit_instances').select('duration_days').eq('id', instance_id).execute()
+    if not result.data:
+        raise HTTPException(status_code=404, detail="Habit not found")
+        
+    duration_days = result.data[0].get('duration_days', 29)
+    end_date = start_date + timedelta(days=duration_days)
+    
+    update_data = {
+        'start_date': start_date.isoformat(),
+        'end_date': end_date.isoformat(),
+        'updated_at': start_date.isoformat()
+    }
+    
+    supabase.table('habit_instances').update(update_data).eq('id', instance_id).execute()
+    
+    return {"status": "success", "start_date": update_data['start_date']}
 
 # ==================== NOTIFICATION ROUTES ====================
 

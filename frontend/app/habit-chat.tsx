@@ -14,7 +14,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useStore, ChatMessage } from '../src/store/useStore';
-import { sendHabitChatMessage } from '../src/services/api';
+import { sendHabitChatMessage, createHabitInstance } from '../src/services/api';
 import { ChatBubble } from '../src/components/ChatBubble';
 import { COLORS, SPACING, FONTS, BORDER_RADIUS, MICROCOPY } from '../src/constants/theme';
 
@@ -73,9 +73,21 @@ export default function HabitChatScreen() {
           category: response.category || 'other',
         });
 
-        // Navigate to payment/confirmation screen after a short delay
+        // Create the habit instance immediately
+        const newHabit = await createHabitInstance({
+          user_id: user?.id || '',
+          habit_name: response.habit_name || 'New Habit',
+          habit_description: `Journey to build ${response.habit_name}`,
+          category: response.category || 'other',
+          duration_days: 29,
+        });
+
+        // Navigate to roadmap with paywall forced (isNew=true)
         setTimeout(() => {
-          router.push('/payment');
+          router.replace({
+            pathname: '/habit-roadmap/[id]',
+            params: { id: newHabit.id, isNew: 'true' }
+          });
         }, 1500);
       }
     } catch (error) {

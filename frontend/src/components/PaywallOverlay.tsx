@@ -62,7 +62,7 @@ export const PaywallOverlay: React.FC<PaywallOverlayProps> = ({
 
   const handlePurchase = async () => {
     const pkg = selectedPlan === 'monthly' ? packages.monthly : packages.yearly;
-    
+
     if (!pkg) {
       // For development/demo, simulate success
       Alert.alert(
@@ -81,11 +81,11 @@ export const PaywallOverlay: React.FC<PaywallOverlayProps> = ({
     setPurchasing(true);
     try {
       const result = await purchasePackage(pkg);
-      
+
       if (result.success) {
         Alert.alert(
           'Welcome to HabitGPT!',
-          isFirstHabit 
+          isFirstHabit
             ? 'Your first 29 days are FREE! Start building your habit now.'
             : 'Subscription activated. Let\'s keep growing!',
           [{ text: 'Let\'s Go', onPress: () => onSuccess() }]
@@ -105,7 +105,7 @@ export const PaywallOverlay: React.FC<PaywallOverlayProps> = ({
     setPurchasing(true);
     try {
       const result = await restorePurchases();
-      
+
       if (result.isSubscribed) {
         Alert.alert('Restored!', 'Your subscription has been restored.', [
           { text: 'Continue', onPress: () => onSuccess() },
@@ -133,11 +133,12 @@ export const PaywallOverlay: React.FC<PaywallOverlayProps> = ({
       transparent
       animationType="fade"
       statusBarTranslucent
+      onRequestClose={onClose}
     >
       <View style={styles.container}>
         {/* Blur Background */}
         <BlurView intensity={Platform.OS === 'ios' ? 40 : 80} style={styles.blur} tint="light" />
-        
+
         {/* Content */}
         <View style={styles.content}>
           <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
@@ -153,7 +154,7 @@ export const PaywallOverlay: React.FC<PaywallOverlayProps> = ({
               <View style={styles.iconContainer}>
                 <Ionicons name="leaf" size={40} color={COLORS.primary} />
               </View>
-              
+
               {isFirstHabit ? (
                 <>
                   <Text style={styles.title}>Unlock Your Journey</Text>
@@ -196,7 +197,7 @@ export const PaywallOverlay: React.FC<PaywallOverlayProps> = ({
                   </View>
                   <Text style={styles.planTitle}>Monthly</Text>
                 </View>
-                
+
                 <View style={styles.priceContainer}>
                   {isFirstHabit && (
                     <Text style={styles.originalPrice}>{monthlyPrice}</Text>
@@ -208,7 +209,7 @@ export const PaywallOverlay: React.FC<PaywallOverlayProps> = ({
                     {isFirstHabit ? `then ${monthlyPrice}/month` : 'per month'}
                   </Text>
                 </View>
-                
+
                 <Text style={styles.planDescription}>
                   Cancel anytime. Auto-renews monthly.
                 </Text>
@@ -226,7 +227,7 @@ export const PaywallOverlay: React.FC<PaywallOverlayProps> = ({
                 <View style={styles.savingsBadge}>
                   <Text style={styles.savingsBadgeText}>SAVE {savingsPercent}%</Text>
                 </View>
-                
+
                 <View style={styles.planHeader}>
                   <View style={[
                     styles.radioButton,
@@ -238,7 +239,7 @@ export const PaywallOverlay: React.FC<PaywallOverlayProps> = ({
                   </View>
                   <Text style={styles.planTitle}>Yearly</Text>
                 </View>
-                
+
                 <View style={styles.priceContainer}>
                   {isFirstHabit && (
                     <Text style={styles.originalPrice}>{yearlyPrice}</Text>
@@ -247,12 +248,12 @@ export const PaywallOverlay: React.FC<PaywallOverlayProps> = ({
                     {isFirstHabit ? 'FREE' : yearlyPrice}
                   </Text>
                   <Text style={styles.priceSubtext}>
-                    {isFirstHabit 
-                      ? `then ${yearlyPrice}/year (${yearlyMonthly}/mo)` 
+                    {isFirstHabit
+                      ? `then ${yearlyPrice}/year (${yearlyMonthly}/mo)`
                       : `${yearlyMonthly}/month, billed annually`}
                   </Text>
                 </View>
-                
+
                 <Text style={styles.planDescription}>
                   Best value. Cancel anytime.
                 </Text>
@@ -297,8 +298,8 @@ export const PaywallOverlay: React.FC<PaywallOverlayProps> = ({
               )}
             </TouchableOpacity>
 
-            <TouchableOpacity 
-              style={styles.restoreButton} 
+            <TouchableOpacity
+              style={styles.restoreButton}
               onPress={handleRestore}
               disabled={purchasing}
             >

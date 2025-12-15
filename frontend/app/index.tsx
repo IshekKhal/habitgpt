@@ -25,7 +25,11 @@ export default function WelcomeScreen() {
   useEffect(() => {
     // If user is already logged in and onboarded, go to home
     if (user?.onboarding_completed) {
-      router.replace('/(tabs)/home');
+      // Small delay to ensure Root Layout is mounted
+      const timer = setTimeout(() => {
+        router.replace('/(tabs)/home');
+      }, 100);
+      return () => clearTimeout(timer);
     }
   }, [user]);
 

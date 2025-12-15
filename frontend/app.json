@@ -1,19 +1,19 @@
 {
   "expo": {
-    "name": "SkillGPT",
-    "slug": "skillgpt",
+    "name": "HabitGPT",
+    "slug": "habitgpt",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "skillgpt",
+    "scheme": "com.abhishekkhanra.habitgpt",
     "userInterfaceStyle": "dark",
     "newArchEnabled": false,
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.skillgpt.app",
+      "bundleIdentifier": "com.abhishekkhanra.habitgpt",
       "infoPlist": {
-        "NSCameraUsageDescription": "SkillGPT needs camera access for profile photos",
-        "NSPhotoLibraryUsageDescription": "SkillGPT needs photo library access for profile photos"
+        "NSCameraUsageDescription": "HabitGPT needs camera access for profile photos",
+        "NSPhotoLibraryUsageDescription": "HabitGPT needs photo library access for profile photos"
       }
     },
     "android": {
@@ -21,7 +21,7 @@
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#0F0F1A"
       },
-      "package": "com.skillgpt.app",
+      "package": "com.abhishekkhanra.habitgpt",
       "permissions": [
         "android.permission.CAMERA",
         "android.permission.READ_EXTERNAL_STORAGE",
@@ -39,10 +39,11 @@
     },
     "plugins": [
       "expo-router",
+      "@react-native-google-signin/google-signin",
       [
         "expo-notifications",
         {
-          "icon": "./assets/images/notification-icon.png",
+          "icon": "./assets/images/icon.png",
           "color": "#6366F1",
           "sounds": []
         }
@@ -55,16 +56,13 @@
     "extra": {
       "router": {
         "origin": false
-      },
-      "eas": {
-        "projectId": "your-eas-project-id"
       }
     },
     "notification": {
-      "icon": "./assets/images/notification-icon.png",
+      "icon": "./assets/images/icon.png",
       "color": "#6366F1",
       "androidMode": "default",
-      "androidCollapsedTitle": "SkillGPT"
+      "androidCollapsedTitle": "HabitGPT"
     }
   }
 }

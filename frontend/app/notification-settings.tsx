@@ -31,6 +31,7 @@ export default function NotificationSettingsScreen() {
     morningTime: '09:00',
     afternoonTime: '14:00',
     eveningTime: '20:00',
+    coachStyle: 'adaptive',
   });
   const [showTimePicker, setShowTimePicker] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -68,7 +69,7 @@ export default function NotificationSettingsScreen() {
 
       const newPrefs = { ...preferences, [showTimePicker]: timeStr };
       setPreferences(newPrefs);
-      
+
       if (Platform.OS === 'ios') {
         // On iOS, save when done button is pressed
       } else {
@@ -92,7 +93,7 @@ export default function NotificationSettingsScreen() {
   const handleTestNotification = async () => {
     await sendImmediateNotification(
       'Test Notification',
-      'This is a test notification from SkillGPT!'
+      'This is a test notification from HabitGPT!'
     );
     Alert.alert('Sent!', 'A test notification has been sent.');
   };
@@ -244,7 +245,7 @@ export default function NotificationSettingsScreen() {
         {/* Test Section */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Testing</Text>
-          
+
           <TouchableOpacity style={styles.actionButton} onPress={handleTestNotification}>
             <Ionicons name="paper-plane-outline" size={20} color={COLORS.primary} />
             <Text style={styles.actionButtonText}>Send Test Notification</Text>
@@ -272,8 +273,8 @@ export default function NotificationSettingsScreen() {
           <View style={styles.pickerContainer}>
             <View style={styles.pickerHeader}>
               <Text style={styles.pickerTitle}>
-                Set {showTimePicker === 'morningTime' ? 'Morning' : 
-                     showTimePicker === 'afternoonTime' ? 'Afternoon' : 'Evening'} Time
+                Set {showTimePicker === 'morningTime' ? 'Morning' :
+                  showTimePicker === 'afternoonTime' ? 'Afternoon' : 'Evening'} Time
               </Text>
               <TouchableOpacity onPress={handleDoneTimePicker}>
                 <Text style={styles.pickerDone}>Done</Text>

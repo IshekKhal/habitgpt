@@ -9,6 +9,7 @@ import {
   Animated,
   KeyboardAvoidingView,
   Platform,
+  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
@@ -144,7 +145,7 @@ export default function OnboardingStep() {
   const { step } = useLocalSearchParams<{ step: string }>();
   const currentStep = parseInt(step || '1', 10);
   const question = QUESTIONS[currentStep - 1];
-  
+
   const {
     onboardingProfile,
     updateOnboardingProfile,
@@ -237,42 +238,12 @@ export default function OnboardingStep() {
 
         setOnboardingProfile(createdProfile);
 
-        // Create or get user (simplified - in production use Google auth)
-        const newUser = await createUser({
-          email: `user_${Date.now()}@habitgpt.app`,
-          name: 'HabitGPT User',
-        });
-
-        // Link profile to user
-        if (createdProfile.id) {
-          await linkOnboardingToUser(createdProfile.id, newUser.id);
-        }
-
-        // Update user with onboarding completed
-        const updatedUser = {
-          ...newUser,
-          onboarding_completed: true,
-          onboarding_profile_id: createdProfile.id,
-        };
-        setUser(updatedUser);
-
-        // Initialize notifications with user's coach style
-        await initializeNotifications(
-          updatedUser.id,
-          finalProfile.coach_style_preference || 'adaptive'
-        );
-
-        // Navigate to home with small delay to ensure router is mounted
-        setTimeout(() => {
-          router.replace('/(tabs)/home');
-        }, 100);
+        // Navigate to Auth screen to create account/login and link profile
+        router.push('/auth');
       } catch (error) {
-        console.error('Error completing onboarding:', error);
+        console.error('Error saving onboarding:', error);
         setIsSubmitting(false);
-        // Still navigate to home on error (will be guest user)
-        setTimeout(() => {
-          router.replace('/(tabs)/home');
-        }, 100);
+        Alert.alert('Error', 'Failed to save progress. Please try again.');
       }
     }
   };
@@ -286,7 +257,7 @@ export default function OnboardingStep() {
 
   const getCoachStylePreview = () => {
     if (question.fieldName !== 'coach_style_preference' || !selectedSingle) return null;
-    
+
     const style = COACH_STYLES[selectedSingle as keyof typeof COACH_STYLES];
     if (!style) return null;
 
@@ -417,8 +388,8 @@ export default function OnboardingStep() {
               {isSubmitting
                 ? 'Setting up...'
                 : currentStep === QUESTIONS.length
-                ? 'Start Your Journey'
-                : 'Continue'}
+                  ? 'Start Your Journey'
+                  : 'Continue'}
             </Text>
             {!isSubmitting && (
               <Ionicons

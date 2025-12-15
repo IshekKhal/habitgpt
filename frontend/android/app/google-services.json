@@ -1,0 +1,47 @@
+{
+  "project_info": {
+    "project_number": "942186871078",
+    "project_id": "ascendant-baton-478818-g2",
+    "storage_bucket": "ascendant-baton-478818-g2.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:942186871078:android:81fe93cffb8311dbd8a9e7",
+        "android_client_info": {
+          "package_name": "com.abhishekkhanra.habitgpt"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "942186871078-labf7nje3v2l0cpeg4j3dkb0t0qral6u.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.abhishekkhanra.habitgpt",
+            "certificate_hash": "bfcbb5d97804b4ad6ce0c53b130d89a8ffb2f424"
+          }
+        },
+        {
+          "client_id": "942186871078-5u7jfa3ks09o5uq58qaoe4njrs9o30lj.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAZGJ6hlGV-XQ3yf1P7gnvUe66rA_m_h08"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "942186871078-5u7jfa3ks09o5uq58qaoe4njrs9o30lj.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
