@@ -8,9 +8,13 @@ from pathlib import Path
 from pydantic import BaseModel, Field
 from typing import List, Optional, Dict, Any
 import uuid
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import json
 import google.generativeai as genai
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
+from fastapi import FastAPI, APIRouter, HTTPException, Request
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -41,6 +45,11 @@ else:
 
 # Create the main app
 app = FastAPI(title="HabitGPT API", version="1.0.0")
+
+# Initialize Rate Limiter
+limiter = Limiter(key_func=get_remote_address)
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 @app.get("/")
 async def root():
@@ -124,6 +133,7 @@ class UserCreate(BaseModel):
     email: str
     name: str
     google_id: Optional[str] = None
+    apple_id: Optional[str] = None
     avatar_url: Optional[str] = None
 
 class UserResponse(BaseModel):
@@ -131,12 +141,13 @@ class UserResponse(BaseModel):
     email: str
     name: str
     google_id: Optional[str] = None
+    apple_id: Optional[str] = None
     avatar_url: Optional[str] = None
-    onboarding_completed: bool = False
+    onboarding_completed: Optional[bool] = False
     onboarding_profile_id: Optional[str] = None
-    trial_started: bool = False
+    trial_started: Optional[bool] = False
     trial_start_date: Optional[str] = None
-    subscription_active: bool = False
+    subscription_active: Optional[bool] = False
     created_at: Optional[str] = None
 
 class ChatMessage(BaseModel):
@@ -160,6 +171,27 @@ class TaskCompletionRequest(BaseModel):
     task_id: str
     day_number: int
     completed: Optional[bool] = True
+
+class RegisterPushTokenRequest(BaseModel):
+    user_id: str
+    push_token: str
+    platform: str
+
+class UpdateNotificationPrefsRequest(BaseModel):
+    daily_reminders: Optional[bool] = None
+    morning_time: Optional[str] = None
+    afternoon_time: Optional[str] = None
+    evening_time: Optional[str] = None
+    milestone_alerts: Optional[bool] = None
+    streak_notifications: Optional[bool] = None
+
+class UpdateSubscriptionRequest(BaseModel):
+    is_subscribed: bool
+    is_trial_active: Optional[bool] = None
+    trial_end_date: Optional[str] = None
+    expiration_date: Optional[str] = None
+    product_id: Optional[str] = None
+    will_renew: Optional[bool] = None
 
 # ... (omitted sections)
 
@@ -229,8 +261,7 @@ async def complete_task(instance_id: str, request: TaskCompletionRequest):
             'completion_percentage': completion_percentage,
             'current_streak': current_streak,
             'longest_streak': longest_streak,
-            'last_completed_date': last_completed_date,
-            'updated_at': datetime.utcnow().isoformat()
+            'last_completed_date': last_completed_date
         }
         
         supabase.table('habit_instances').update(update_data).eq('id', instance_id).execute()
@@ -271,8 +302,8 @@ class UpdateSubscriptionRequest(BaseModel):
 def get_gemini_model():
     """Get the Gemini model for chat"""
     try:
-        # Use valid model name
-        return genai.GenerativeModel('gemini-flash-latest')
+        # Use stable 2.5-flash model (User Requested)
+        return genai.GenerativeModel('gemini-2.5-flash')
     except Exception as e:
         logger.error(f"Failed to initialize Gemini model: {e}")
         raise HTTPException(status_code=500, detail=f"AI Model Error: {str(e)}")
@@ -313,33 +344,35 @@ User Profile:
         'adaptive': "Adapt your tone based on the user's responses and needs.",
     }
     
-    prompt = f"""You are a habit formation coach for HabitGPT app. Your job is to help users clarify exactly what habit they want to develop in 29 days.
-
-{profile_context}
-
-TONE: {tone_guidance.get(coach_style, tone_guidance['adaptive'])}
-
-CONVERSATION HISTORY:
-{history_text}
-
-USER'S LATEST MESSAGE: {user_message}
-
-RULES:
-1. NEVER generate a roadmap until the habit is completely clear and actionable
-2. Ask clarifying questions to narrow down the exact habit
-3. Ensure the habit is SPECIFIC, MEASURABLE, and achievable in their daily time ({onboarding_profile.get('max_daily_effort_minutes', 10) if onboarding_profile else 10} minutes)
-4. Consider their failure patterns and obstacles when suggesting
-5. Once the habit is clear, confirm with the user before proceeding
-6. When ready to proceed, end your message with [READY_FOR_ROADMAP:habit_name:category]
-
-RESPONSE FORMAT:
-- If habit is vague: Ask clarifying questions with numbered options
-- If habit needs time/trigger clarification: Ask about when and where they'll do it
-- If ready for roadmap: Confirm the habit and end with [READY_FOR_ROADMAP:habit_name:category]
-
-Categories: sleep_energy, focus_productivity, health_fitness, spiritual_mental, discipline, relationships, other
-
-Respond naturally as a helpful habit coach:"""
+    prompt = f"""You are an expert "2026 Success Strategist" for HabitGPT, but you must speak like a supportive, down-to-earth friend. 
+    
+    GOAL: Guide the user to a specific 29-day plan.
+    
+    CRITICAL RULES FOR YOUR TONE:
+    1. NO "ROBOT TALK". Do not use words like "adherence", "optimal", "methodology", "execute", "parameters".
+    2. USE SIMPLE ENGLISH. Talk like a normal human. Say "stick to it" instead of "maintain consistency". Say "easy start" instead of "minimal friction".
+    3. NO MARKDOWN HEADERS. User hates `###` or `####`. NEVER use them. Use **bold** if you really need to emphasize a word, but mostly just text.
+    4. NO FORMAL LABELS. Never say "STAGE 1" or "PROPOSAL". Just talk.
+    
+    {profile_context}
+    
+    CONVERSATION HISTORY:
+    {history_text}
+    
+    USER'S LATEST MESSAGE: {user_message}
+    
+    YOUR PROCESS (Internal Only - DO NOT expose these labels to user):
+    - If you need more info -> Ask 1 simple question.
+    - If you are ready to propose plans -> "I've got two ideas for you:"
+      - Idea A: [Simple Name] - [One sentence description]
+      - Idea B: [Simple Name] - [One sentence description]
+      - "Which one sounds better?"
+    - If they chose a plan -> Confirm it and say why it's a good choice. THEN ASK: "I have everything I need. Are you ready for me to build your 29-day roadmap now?"
+    - If input is just "Yes" or "Ready" (after you asked the above) -> THEN End with [READY_FOR_ROADMAP:Habit Name:Category].
+    
+    End with [READY_FOR_ROADMAP:Habit Name:Category] ONLY when the user has EXPLICITLY confirmed they are ready for you to build the plan. Do not trigger this just because they selected an option. Ask for permission first.
+    
+    Respond now as a helpful friend:"""
 
     response = model.generate_content(prompt)
     return response.text
@@ -363,67 +396,70 @@ async def generate_habit_roadmap(habit_name: str, category: str, duration_days: 
     
     prompt = f"""Generate a detailed {duration_days}-day habit formation roadmap for: {habit_name} (Category: {category})
 
-USER CONTEXT:
-- Daily available time: {daily_time} minutes (START BELOW THIS)
-- Failure patterns to address: {', '.join(failure_patterns) if failure_patterns else 'none specified'}
-- Primary obstacle: {primary_obstacle}
-- Consistency level: {consistency_level}
+    USER CONTEXT:
+    - Daily available time: {daily_time} minutes (START BELOW THIS)
+    - Failure patterns to address: {', '.join(failure_patterns) if failure_patterns else 'none specified'}
+    - Primary obstacle: {primary_obstacle}
+    - Consistency level: {consistency_level}
 
-{difficulty_note}
+    {difficulty_note}
 
-HABIT FORMATION SCIENCE:
-- Days 1-7: Foundation phase - make it SO easy they can't fail
-- Days 8-14: Building phase - slight increase
-- Days 15-21: Momentum phase - establishing routine
-- Days 22-29: Ownership phase - habit becomes identity
+    CORE REQUIREMENT:
+    - This is a key pillar of the user's 2026 SUCCESS. Make it feel like a professional athlete's training plan.
+    - Break every day's goal into 3-5 specific "Micro-Tasks". 
+    - Example: Instead of just "Workout", generate: ["Put on gym clothes", "Fill water bottle", "Open the 15-min HIIT video", "Complete workout"].
+    - This reduces friction by making the first steps trivial.
 
-Generate a JSON response with this EXACT structure:
-{{
-    "overview": "Brief overview of the 29-day habit journey",
-    "total_days": {duration_days},
-    "milestones": [
-        {{"day": 7, "title": "Week 1 Complete", "description": "Foundation established"}},
-        {{"day": 14, "title": "Week 2 Complete", "description": "Building consistency"}},
-        {{"day": 21, "title": "Week 3 Complete", "description": "Momentum achieved"}},
-        {{"day": 29, "title": "Habit Formed!", "description": "Habit ownership achieved"}}
-    ],
-    "day_plans": [
-        {{
-            "day_number": 1,
-            "tasks": [
-                {{
-                    "id": "unique-id",
-                    "title": "Task title",
-                    "description": "Specific actionable instruction",
-                    "estimated_minutes": 2,
-                    "resource_links": [],
-                    "completed": false
-                }}
-            ]
-        }}
-    ],
-    "resources": [
-        {{
-            "id": "unique-id",
-            "type": "article",
-            "title": "Resource title",
-            "url": "https://...",
-            "description": "Why this resource helps"
-        }}
-    ]
-}}
+    - You MUST provide valid, clickable HTTP URLs in the 'resource_links' array for every task that implies content.
+    - NEVER use specific YouTube Video IDs (like v=dQw4w9WgXcQ) because they might be deleted or unavailable.
+    - INSTEAD, generate a specific YouTube Search URL. This is the MOST RELIABLE method.
+    - Example: "https://www.youtube.com/results?search_query=10+minute+morning+meditation+for+beginners"
+    - ONLY use a specific direct video link if you are 100% certain it is a timeless, official resource (like a TED Talk), otherwise default to Search Query.
+    - 'resource_links' must be an array of strings, where each string is a full URL starting with "https://".
 
-CRITICAL RULES:
-1. Generate day_plans for ALL {duration_days} days
-2. Week 1 tasks should take LESS than {max(2, daily_time // 3)} minutes each
-3. Gradually increase - never more than {daily_time} minutes total per day
-4. Each day should have 1-2 tasks maximum for simplicity
-5. Include specific triggers (when/where to do the habit)
-6. Address the user's failure patterns in the plan design
-7. Include motivational tips and progress markers
-8. Generate unique IDs for each task and resource
+    Generate a JSON response with this EXACT structure:
+    {{
+        "overview": "Brief overview of the 29-day habit journey",
+        "total_days": {duration_days},
+        "milestones": [
+            {{"day": 7, "title": "Week 1 Complete", "description": "Foundation established"}},
+            {{"day": 14, "title": "2 Weeks Strong", "description": "Habit loop forming"}},
+            {{"day": 21, "title": "3 Weeks - The Shift", "description": "Identity shifting"}},
+            {{"day": 29, "title": "Graduation", "description": "Habit installed"}}
+        ],
+        "day_plans": [
+            {{
+                "day_number": 1,
+                "tasks": [
+                    {{
+                        "id": "unique-id-1",
+                        "title": "Micro-step 1",
+                        "description": "Very small actionable step",
+                        "estimated_minutes": 1,
+                        "resource_links": ["https://www.youtube.com/watch?v=example"],
+                        "completed": false
+                    }},
+                    {{
+                        "id": "unique-id-2",
+                        "title": "Main Action",
+                        "description": "The actual habit",
+                        "estimated_minutes": 10,
+                        "resource_links": [],
+                        "completed": false
+                    }}
+                ]
+            }}
+        ],
+        "resources": [] 
+    }}
 
-Return ONLY the JSON, no markdown formatting:"""
+    CRITICAL RULES:
+    1. STRICT JSON format only.
+    2. 3-5 Micro-tasks per day.
+    3. Include URLs in 'resource_links' for tasks that need them.
+    4. Gradually increase difficulty.
+    
+    Return ONLY the JSON, no markdown formatting:"""
 
     response = model.generate_content(prompt)
     response_text = response.text.strip()
@@ -459,6 +495,67 @@ Return ONLY the JSON, no markdown formatting:"""
         logger.error(f"Failed to parse roadmap JSON: {e}")
         logger.error(f"Response text: {response_text}")
         raise HTTPException(status_code=500, detail="Failed to generate roadmap")
+
+async def generate_notification_content(user_name: str, habit_name: str, time_of_day: str, coach_style: str, tasks_remaining: int = 0):
+    """Generate personalized notification content using Gemini"""
+    model = get_gemini_model()
+    
+    tone_prompts = {
+        'gentle': "warm, encouraging, and kind. Use emojis like 🌱 or 💚.",
+        'structured': "clear, professional, and organized. Focus on the plan.",
+        'strict': "direct, firm, and no-excuses. Call them out.",
+        'adaptive': "friendly but firm, like a personal accountability partner.",
+    }
+    
+    style_guide = tone_prompts.get(coach_style, tone_prompts['adaptive'])
+    
+    context = ""
+    if time_of_day == 'morning':
+        context = f"It is morning. Remind {user_name} to start their '{habit_name}'. Mention they have {tasks_remaining} micro-tasks likely waiting."
+    elif time_of_day == 'evening':
+        if tasks_remaining > 0:
+            context = f"It is evening. {user_name} has NOT finished '{habit_name}' yet. Create a FOMO (Fear Of Missing Out) or urgent reminder. warn them about breaking the streak."
+        else:
+            context = f"It is evening. {user_name} has finished '{habit_name}'. Congratulate them briefly."
+    else: # afternoon
+        context = f"Afternoon check-in. Ask {user_name} if they've done '{habit_name}' yet. Keep it VERY subtle and low-pressure. Just a gentle nudge."
+
+    prompt = f"""Write a single, punchy Push Notification (max 15 words).
+    Context: {context}
+    Tone: {style_guide}
+    User Name: {user_name}
+    
+    Return ONLY the text of the notification."""
+    
+    try:
+        response = model.generate_content(prompt)
+        return response.text.strip().replace('"', '')
+    except Exception as e:
+        logger.error(f"AI Notification Gen Failed: {e}")
+        # Fallbacks
+        if time_of_day == 'morning': return f"Good morning {user_name}! Time for {habit_name}."
+        if time_of_day == 'evening': return f"Don't break the streak, {user_name}! Finish {habit_name}."
+        return f"Hi {user_name}, how is {habit_name} going?"
+
+class NotificationGenRequest(BaseModel):
+    user_name: str
+    habit_name: str
+    time_of_day: str
+    coach_style: str
+    tasks_remaining: int = 0
+
+@api_router.post("/notifications/generate")
+@limiter.limit("10/minute")
+async def generate_notification(request: Request, notif_request: NotificationGenRequest):
+    request_data = notif_request # Rename for clarity since first arg is now request object
+    content = await generate_notification_content(
+        request_data.user_name,
+        request_data.habit_name,
+        request_data.time_of_day,
+        request_data.coach_style,
+        request_data.tasks_remaining
+    )
+    return {"content": content}
 
 def calculate_streak(habit_data: dict, completed_today: bool) -> tuple:
     """Calculate current and longest streak"""
@@ -502,6 +599,14 @@ async def health_check():
 
 # ==================== USER ROUTES ====================
 
+class UserCreate(BaseModel):
+    email: str
+    name: str
+    google_id: Optional[str] = None
+    apple_id: Optional[str] = None
+    avatar_url: Optional[str] = None
+    id: Optional[str] = None  # Allow explicit ID provided by Supabase Auth
+
 @api_router.post("/users", response_model=UserResponse)
 async def create_user(user_data: UserCreate):
     """Create a new user or return existing user by email"""
@@ -516,10 +621,11 @@ async def create_user(user_data: UserCreate):
     
     # Create new user
     new_user = {
-        'id': generate_uuid(),
+        'id': user_data.id if user_data.id else generate_uuid(),
         'email': user_data.email,
         'name': user_data.name,
         'google_id': user_data.google_id,
+        'apple_id': user_data.apple_id,
         'avatar_url': user_data.avatar_url,
         'onboarding_completed': False,
         'trial_started': False,
@@ -638,13 +744,14 @@ async def link_onboarding_to_user(profile_id: str, user_id: str):
 # ==================== HABIT CHAT ROUTES ====================
 
 @api_router.post("/habits/chat")
-async def habit_chat(request: ChatRequest):
+@limiter.limit("10/minute")
+async def habit_chat(request: Request, chat_request: ChatRequest):
     """Chat with AI for habit selection and clarification"""
     onboarding_profile = None
     
-    if request.user_id and supabase:
+    if chat_request.user_id and supabase:
         # Get user's onboarding profile
-        user_result = supabase.table('users').select('onboarding_profile_id').eq('id', request.user_id).execute()
+        user_result = supabase.table('users').select('onboarding_profile_id').eq('id', chat_request.user_id).execute()
         
         if user_result.data and len(user_result.data) > 0 and user_result.data[0].get('onboarding_profile_id'):
             profile_result = supabase.table('onboarding_profiles').select('*').eq('id', user_result.data[0]['onboarding_profile_id']).execute()
@@ -652,11 +759,11 @@ async def habit_chat(request: ChatRequest):
                 onboarding_profile = profile_result.data[0]
     
     # Convert chat history to proper format
-    chat_history = [{"role": msg.role, "content": msg.content} for msg in request.chat_history]
+    chat_history = [{"role": msg.role, "content": msg.content} for msg in chat_request.chat_history]
     
     try:
         # Generate AI response
-        response = await generate_habit_clarification(request.message, chat_history, onboarding_profile)
+        response = await generate_habit_clarification(chat_request.message, chat_history, onboarding_profile)
         
         # Check if ready for roadmap
         ready_for_roadmap = "[READY_FOR_ROADMAP" in response
@@ -687,7 +794,8 @@ async def habit_chat(request: ChatRequest):
 # ==================== HABIT INSTANCE ROUTES ====================
 
 @api_router.post("/habits/instances")
-async def create_habit_instance(habit_data: HabitInstanceCreate):
+@limiter.limit("20/minute")
+async def create_habit_instance(request: Request, habit_data: HabitInstanceCreate):
     """Create a new habit instance and generate roadmap"""
     if not supabase:
         raise HTTPException(status_code=500, detail="Database not configured")
@@ -700,7 +808,19 @@ async def create_habit_instance(habit_data: HabitInstanceCreate):
         profile_result = supabase.table('onboarding_profiles').select('*').eq('id', user_result.data[0]['onboarding_profile_id']).execute()
         if profile_result.data and len(profile_result.data) > 0:
             onboarding_profile = profile_result.data[0]
-    
+        if profile_result.data and len(profile_result.data) > 0:
+            onboarding_profile = profile_result.data[0]
+            
+    # Check habit limit (5 active habits max)
+    existing_habits = supabase.table('habit_instances')\
+        .select('*', count='exact')\
+        .eq('user_id', habit_data.user_id)\
+        .execute()
+        
+    if existing_habits.count and existing_habits.count >= 5:
+        # Check subscription? Frontend handles paywall/subscription checks.
+        # But for HARD LIMIT of 5, we enforce it here for everyone based on user request.
+        raise HTTPException(status_code=400, detail="Habit limit reached. You can only have 5 active habits.")
     # Generate roadmap
     roadmap = await generate_habit_roadmap(
         habit_data.habit_name,
@@ -1059,7 +1179,7 @@ async def get_subscription_status(user_id: str):
         is_valid = True
         if sub.get('subscription_end_date'):
             end_date = datetime.fromisoformat(sub['subscription_end_date'].replace('Z', '+00:00'))
-            is_valid = end_date > datetime.utcnow()
+            is_valid = end_date > datetime.now(timezone.utc)
         
         return {
             "is_subscribed": is_valid and sub.get('is_subscribed', False),
@@ -1078,7 +1198,7 @@ async def get_subscription_status(user_id: str):
         if trial_start:
             trial_start_dt = datetime.fromisoformat(trial_start.replace('Z', '+00:00'))
             trial_end = trial_start_dt + timedelta(days=30)
-            is_trial_active = datetime.utcnow() < trial_end
+            is_trial_active = datetime.now(timezone.utc) < trial_end
             return {
                 "is_subscribed": is_trial_active,
                 "is_trial_active": is_trial_active,

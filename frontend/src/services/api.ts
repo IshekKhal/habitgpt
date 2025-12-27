@@ -11,13 +11,47 @@ const api = axios.create({
   },
 });
 
+// Helper for retrying requests with exponential backoff
+async function retryRequest<T>(fn: () => Promise<T>, retries = 3, delay = 1000): Promise<T> {
+  try {
+    return await fn();
+  } catch (error) {
+    if (retries === 0) throw error;
+    await new Promise(resolve => setTimeout(resolve, delay));
+    return retryRequest(fn, retries - 1, delay * 2);
+  }
+}
+
+// <ANTIGRAVITY_DEBUG>
+api.interceptors.request.use(request => {
+  console.log('>>> Request:', request.method?.toUpperCase(), request.url);
+  return request;
+});
+
+api.interceptors.response.use(
+  response => {
+    console.log('<<< Response:', response.status, response.config.url);
+    return response;
+  },
+  error => {
+    console.log('!!! Error:', error.message, error.response?.status, error.config?.url);
+    if (error.response) {
+      console.log('!!! Error Data:', JSON.stringify(error.response.data).substring(0, 200));
+    }
+    return Promise.reject(error);
+  }
+);
+// </ANTIGRAVITY_DEBUG>
+
 // ==================== USER API ====================
 
 export const createUser = async (userData: {
   email: string;
   name: string;
   google_id?: string;
+  apple_id?: string;
   avatar_url?: string;
+  id?: string;
 }): Promise<User> => {
   const response = await api.post('/api/users', userData);
   return response.data;
@@ -97,12 +131,14 @@ export const sendHabitChatMessage = async (
   habit_name?: string;
   category?: string;
 }> => {
-  const response = await api.post('/api/habits/chat', {
-    user_id: userId,
-    message,
-    chat_history: chatHistory,
-  });
-  return response.data;
+  return retryRequest(async () => {
+    const response = await api.post('/api/habits/chat', {
+      user_id: userId,
+      message,
+      chat_history: chatHistory,
+    });
+    return response.data;
+  }, 3, 2000); // Retry 3 times, starting with 2s delay
 };
 
 // ==================== HABIT INSTANCE API ====================

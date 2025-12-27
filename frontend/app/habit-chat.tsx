@@ -9,6 +9,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
+  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
@@ -19,7 +20,7 @@ import { ChatBubble } from '../src/components/ChatBubble';
 import { COLORS, SPACING, FONTS, BORDER_RADIUS, MICROCOPY } from '../src/constants/theme';
 
 export default function HabitChatScreen() {
-  const { user, currentChatHistory, addChatMessage, clearChatHistory, setPendingHabit, onboardingProfile } = useStore();
+  const { user, currentChatHistory, addChatMessage, removeLastMessage, clearChatHistory, setPendingHabit, onboardingProfile } = useStore();
   const [inputText, setInputText] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const flatListRef = useRef<FlatList>(null);
@@ -45,13 +46,15 @@ export default function HabitChatScreen() {
     });
   }, []);
 
+
+
   const handleSend = async () => {
     if (!inputText.trim() || isLoading) return;
 
     const userMessage = inputText.trim();
     setInputText('');
 
-    // Add user message to chat
+    // Add user message to chat immediately (Optimistic UI)
     addChatMessage({ role: 'user', content: userMessage });
 
     setIsLoading(true);
@@ -92,10 +95,20 @@ export default function HabitChatScreen() {
       }
     } catch (error) {
       console.error('Chat error:', error);
-      addChatMessage({
-        role: 'assistant',
-        content: "I'm having trouble processing your request. Please try again.",
-      });
+
+      // RESTORE INPUT STRATEGY
+      // 1. Remove the optimistic user message we just added
+      removeLastMessage();
+
+      // 2. Restore context to input so they can modify/resend
+      setInputText(userMessage);
+
+      // 3. Inform user
+      Alert.alert(
+        "Connection Failed",
+        "We couldn't send your message. Please check your internet and try again."
+      );
+
     } finally {
       setIsLoading(false);
     }
@@ -118,7 +131,7 @@ export default function HabitChatScreen() {
           <Ionicons name="close" size={24} color={COLORS.textPrimary} />
         </TouchableOpacity>
         <View style={styles.headerTitleContainer}>
-          <Text style={styles.headerTitle}>New Habit</Text>
+          <Text style={styles.headerTitle}>HabitGPT</Text>
           <Text style={styles.headerSubtitle}>29-day journey</Text>
         </View>
         <View style={{ width: 44 }} />

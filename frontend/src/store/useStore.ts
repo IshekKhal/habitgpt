@@ -8,6 +8,7 @@ export interface User {
   email: string;
   name: string;
   google_id?: string;
+  apple_id?: string;
   avatar_url?: string;
   onboarding_completed: boolean;
   onboarding_profile_id?: string;
@@ -125,11 +126,17 @@ interface HabitGPTStore {
   // Chat state
   currentChatHistory: ChatMessage[];
   addChatMessage: (message: ChatMessage) => void;
+  removeLastMessage: () => void;
   clearChatHistory: () => void;
 
   // Pending habit (from chat, before payment)
   pendingHabit: PendingHabit | null;
   setPendingHabit: (habit: PendingHabit | null) => void;
+
+  // <ANTIGRAVITY_DEV_ONLY>
+  isDevMode: boolean;
+  setDevMode: (enabled: boolean) => void;
+  // </ANTIGRAVITY_DEV_ONLY>
 
   // Habit instances
   habitInstances: HabitInstance[];
@@ -154,9 +161,9 @@ const initialOnboardingProfile: OnboardingProfile = {
   failure_patterns: [],
   baseline_consistency_level: '',
   primary_obstacle: '',
-  max_daily_effort_minutes: 10,
+  max_daily_effort_minutes: 0, // 0 = unselected (valid options are 5, 10, 20, 30)
   miss_response_type: '',
-  coach_style_preference: 'adaptive',
+  coach_style_preference: '', // Empty = unselected
 };
 
 const initialSubscriptionStatus: SubscriptionStatus = {
@@ -202,11 +209,21 @@ export const useStore = create<HabitGPTStore>((set, get) => ({
       currentChatHistory: [...state.currentChatHistory, message],
     }));
   },
+  removeLastMessage: () => {
+    set((state) => ({
+      currentChatHistory: state.currentChatHistory.slice(0, -1),
+    }));
+  },
   clearChatHistory: () => set({ currentChatHistory: [] }),
 
   // Pending habit
   pendingHabit: null,
   setPendingHabit: (habit) => set({ pendingHabit: habit }),
+
+  // <ANTIGRAVITY_DEV_ONLY>
+  isDevMode: false,
+  setDevMode: (enabled) => set({ isDevMode: enabled }),
+  // </ANTIGRAVITY_DEV_ONLY>
 
   // Habit instances
   habitInstances: [],

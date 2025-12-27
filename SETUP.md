@@ -294,14 +294,46 @@ curl https://your-app.railway.app/api/health
 1. Go to [revenuecat.com](https://www.revenuecat.com) and sign up
 2. Create a new project: **HabitGPT**
 
-### Step 2: Configure Products
+### Step 2: Configure Products (The Source of Truth)
+**Crucial Concept**: You define price, trial, and auto-renew logic in the **App Stores**, not in RevenueCat. RevenueCat simply mirrors these settings.
 
-Create these products in App Store Connect / Google Play Console:
+#### A. Google Play Console (Android)
+1.  **Create Subscription**:
+    - Go to **Monetize** → **Subscriptions** → **Create subscription**.
+    - **Product ID**: `habitgpt_monthly_599`
+    - **Name**: "HabitGPT Monthly"
+2.  **Add Base Plan**:
+    - Click "Add base plan".
+    - **Renewal Type**: Auto-renewing (this enables "Auto-pay").
+    - **Price**: Set to $5.99 (or local equivalent).
+3.  **Add Free Trial (The "Offer")**:
+    - Inside the Base Plan, scroll to **Offers**.
+    - Click **Add Offer**.
+    - **Eligibility**: "New customer acquisition".
+    - **Phase**: Select "Free Trial".
+    - **Duration**: Set to `7 Days` (or your preferred trial length).
+    - **Billing**: "Auto-renews after trial".
 
-| Product ID | Name | Price | Duration |
-|------------|------|-------|----------|
-| `habitgpt_monthly_1999` | HabitGPT Monthly | $19.99 | Monthly |
-| `habitgpt_yearly_15999` | HabitGPT Yearly | $159.99 | Yearly |
+#### B. App Store Connect (iOS)
+1.  **Create Auto-Renewable Subscription**:
+    - Go to **Features** → **Subscriptions**.
+    - Create a Group (e.g., "Premium Access").
+2.  **Create Product**:
+    - **Product ID**: `habitgpt_monthly_599`
+    - **Duration**: 1 Month.
+    - **Price**: Tier corresponding to $5.99.
+3.  **Add Introductory Offer (Trial)**:
+    - Scroll down to **Introductory Offers**.
+    - Click **+**.
+    - **Type**: Free Trial.
+    - **Duration**: 7 Days.
+    - **Territory**: Global.
+
+#### C. Payment Modes & Processing
+- **Who handles money?**: Apple and Google handle all credit card processing, currency conversion, and fraud checks. You do not need Stripe or PayPal.
+- **Auto-Pay**: Since these are "Auto-Renewable Subscriptions", users are automatically charged at the end of the trial/period unless they cancel.
+
+---
 
 ### Step 3: RevenueCat Configuration
 

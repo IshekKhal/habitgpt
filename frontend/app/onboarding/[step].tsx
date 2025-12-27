@@ -154,17 +154,22 @@ export default function OnboardingStep() {
     user,
   } = useStore();
 
-  const [selectedSingle, setSelectedSingle] = useState<string | null>(
-    question.type === 'single' && onboardingProfile
-      ? (onboardingProfile as any)[question.fieldName] || null
-      : null
-  );
-  const [selectedMulti, setSelectedMulti] = useState<string[]>(
-    question.type === 'multi' && onboardingProfile
-      ? (onboardingProfile as any)[question.fieldName] || []
-      : []
-  );
+  const [selectedSingle, setSelectedSingle] = useState<string | null>(null);
+  const [selectedMulti, setSelectedMulti] = useState<string[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Reset state when step changes (Router might reuse component)
+  React.useEffect(() => {
+    if (question.type === 'single') {
+      const val = onboardingProfile ? (onboardingProfile as any)[question.fieldName] : null;
+      setSelectedSingle(val ? val.toString() : null);
+      setSelectedMulti([]);
+    } else {
+      const val = onboardingProfile ? (onboardingProfile as any)[question.fieldName] : [];
+      setSelectedMulti(Array.isArray(val) ? val : []);
+      setSelectedSingle(null);
+    }
+  }, [currentStep, question, onboardingProfile]);
 
   const progress = currentStep / QUESTIONS.length;
   const progressAnim = useRef(new Animated.Value(progress)).current;
@@ -173,9 +178,34 @@ export default function OnboardingStep() {
     Animated.timing(progressAnim, {
       toValue: progress,
       duration: 300,
-      useNativeDriver: false,
+      useNativeDriver: false, // width property
     }).start();
   }, [progress]);
+
+  // Screen Transition Animation
+  const slideAnim = useRef(new Animated.Value(currentStep > 1 ? 100 : 0)).current;
+  const fadeAnim = useRef(new Animated.Value(currentStep > 1 ? 0 : 1)).current;
+
+  React.useEffect(() => {
+    if (currentStep > 1) {
+      // Start slightly pushed down and transparent
+      slideAnim.setValue(100);
+      fadeAnim.setValue(0);
+
+      Animated.parallel([
+        Animated.timing(slideAnim, {
+          toValue: 0,
+          duration: 400,
+          useNativeDriver: true,
+        }),
+        Animated.timing(fadeAnim, {
+          toValue: 1,
+          duration: 400,
+          useNativeDriver: true,
+        }),
+      ]).start();
+    }
+  }, [currentStep]);
 
   const handleSingleSelect = (optionId: string) => {
     setSelectedSingle(optionId);
@@ -275,7 +305,7 @@ export default function OnboardingStep() {
         style={styles.keyboardView}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
-        {/* Header */}
+        {/* Header - Static, now outside animation */}
         <View style={styles.header}>
           <TouchableOpacity onPress={handleBack} style={styles.backButton}>
             <Ionicons name="arrow-back" size={22} color={COLORS.textPrimary} />
@@ -298,108 +328,118 @@ export default function OnboardingStep() {
           </Text>
         </View>
 
-        {/* Question */}
-        <ScrollView
-          style={styles.content}
-          contentContainerStyle={styles.contentContainer}
-          showsVerticalScrollIndicator={false}
+        {/* Animated Content */}
+        <Animated.View
+          style={[
+            styles.animatedContainer,
+            {
+              opacity: fadeAnim,
+              transform: [{ translateY: slideAnim }]
+            }
+          ]}
         >
-          <Text style={styles.questionTitle}>{question.title}</Text>
-          <Text style={styles.questionSubtitle}>{question.subtitle}</Text>
-
-          {/* Options */}
-          <View style={styles.optionsContainer}>
-            {question.options.map((option) => {
-              const isSelected =
-                question.type === 'single'
-                  ? selectedSingle === option.id
-                  : selectedMulti.includes(option.id);
-
-              return (
-                <TouchableOpacity
-                  key={option.id}
-                  style={[styles.optionCard, isSelected && styles.optionCardSelected]}
-                  onPress={() =>
-                    question.type === 'single'
-                      ? handleSingleSelect(option.id)
-                      : handleMultiSelect(option.id)
-                  }
-                  activeOpacity={0.7}
-                >
-                  {option.icon && (
-                    <View style={[
-                      styles.optionIconContainer,
-                      isSelected && styles.optionIconContainerSelected
-                    ]}>
-                      <Ionicons
-                        name={option.icon as any}
-                        size={22}
-                        color={isSelected ? COLORS.textLight : COLORS.textSecondary}
-                      />
-                    </View>
-                  )}
-                  <Text
-                    style={[
-                      styles.optionLabel,
-                      isSelected && styles.optionLabelSelected,
-                    ]}
-                  >
-                    {option.label}
-                  </Text>
-                  <View
-                    style={[
-                      question.type === 'single' ? styles.radioOuter : styles.checkboxOuter,
-                      isSelected && (question.type === 'single' ? styles.radioOuterSelected : styles.checkboxOuterSelected),
-                    ]}
-                  >
-                    {isSelected && (
-                      question.type === 'single' ? (
-                        <View style={styles.radioInner} />
-                      ) : (
-                        <Ionicons name="checkmark" size={14} color={COLORS.textLight} />
-                      )
-                    )}
-                  </View>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
-
-          {/* Multi-select hint */}
-          {question.type === 'multi' && (
-            <Text style={styles.multiHint}>
-              Select all that apply
-            </Text>
-          )}
-
-          {/* Coach style preview */}
-          {getCoachStylePreview()}
-        </ScrollView>
-
-        {/* CTA */}
-        <View style={styles.ctaContainer}>
-          <TouchableOpacity
-            style={[styles.ctaButton, isNextDisabled() && styles.ctaButtonDisabled]}
-            onPress={handleNext}
-            disabled={isNextDisabled() || isSubmitting}
-            activeOpacity={0.8}
+          <ScrollView
+            style={styles.content}
+            contentContainerStyle={styles.contentContainer}
+            showsVerticalScrollIndicator={false}
           >
-            <Text style={styles.ctaButtonText}>
-              {isSubmitting
-                ? 'Setting up...'
-                : currentStep === QUESTIONS.length
-                  ? 'Start Your Journey'
-                  : 'Continue'}
-            </Text>
-            {!isSubmitting && (
-              <Ionicons
-                name={currentStep === QUESTIONS.length ? 'checkmark' : 'arrow-forward'}
-                size={20}
-                color={COLORS.textLight}
-              />
+            <Text style={styles.questionTitle}>{question.title}</Text>
+            <Text style={styles.questionSubtitle}>{question.subtitle}</Text>
+
+            {/* Options */}
+            <View style={styles.optionsContainer}>
+              {question.options.map((option) => {
+                const isSelected =
+                  question.type === 'single'
+                    ? selectedSingle === option.id
+                    : selectedMulti.includes(option.id);
+
+                return (
+                  <TouchableOpacity
+                    key={option.id}
+                    style={[styles.optionCard, isSelected && styles.optionCardSelected]}
+                    onPress={() =>
+                      question.type === 'single'
+                        ? handleSingleSelect(option.id)
+                        : handleMultiSelect(option.id)
+                    }
+                    activeOpacity={0.7}
+                  >
+                    {option.icon && (
+                      <View style={[
+                        styles.optionIconContainer,
+                        isSelected && styles.optionIconContainerSelected
+                      ]}>
+                        <Ionicons
+                          name={option.icon as any}
+                          size={22}
+                          color={isSelected ? COLORS.textLight : COLORS.textSecondary}
+                        />
+                      </View>
+                    )}
+                    <Text
+                      style={[
+                        styles.optionLabel,
+                        isSelected && styles.optionLabelSelected,
+                      ]}
+                    >
+                      {option.label}
+                    </Text>
+                    <View
+                      style={[
+                        question.type === 'single' ? styles.radioOuter : styles.checkboxOuter,
+                        isSelected && (question.type === 'single' ? styles.radioOuterSelected : styles.checkboxOuterSelected),
+                      ]}
+                    >
+                      {isSelected && (
+                        question.type === 'single' ? (
+                          <View style={styles.radioInner} />
+                        ) : (
+                          <Ionicons name="checkmark" size={14} color={COLORS.textLight} />
+                        )
+                      )}
+                    </View>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+
+            {/* Multi-select hint */}
+            {question.type === 'multi' && (
+              <Text style={styles.multiHint}>
+                Select all that apply
+              </Text>
             )}
-          </TouchableOpacity>
-        </View>
+
+            {/* Coach style preview */}
+            {getCoachStylePreview()}
+          </ScrollView>
+
+          {/* CTA */}
+          <View style={styles.ctaContainer}>
+            <TouchableOpacity
+              style={[styles.ctaButton, isNextDisabled() && styles.ctaButtonDisabled]}
+              onPress={handleNext}
+              disabled={isNextDisabled() || isSubmitting}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.ctaButtonText}>
+                {isSubmitting
+                  ? 'Setting up...'
+                  : currentStep === QUESTIONS.length
+                    ? 'Start Your Journey'
+                    : 'Continue'}
+              </Text>
+              {!isSubmitting && (
+                <Ionicons
+                  name={currentStep === QUESTIONS.length ? 'checkmark' : 'arrow-forward'}
+                  size={20}
+                  color={COLORS.textLight}
+                />
+              )}
+            </TouchableOpacity>
+          </View>
+        </Animated.View>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -413,6 +453,9 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.background,
   },
   keyboardView: {
+    flex: 1,
+  },
+  animatedContainer: {
     flex: 1,
   },
   header: {
@@ -581,6 +624,7 @@ const styles = StyleSheet.create({
   },
   ctaButtonDisabled: {
     backgroundColor: COLORS.border,
+    opacity: 0.5,
   },
   ctaButtonText: {
     fontSize: FONTS.size.lg,

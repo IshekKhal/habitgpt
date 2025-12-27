@@ -43,6 +43,14 @@ export default function HomeScreen() {
   };
 
   const handleAddHabit = () => {
+    if (habitInstances.length >= 5) {
+      Alert.alert(
+        'Habit Limit Reached',
+        'You can only have 5 active habits at a time. Please remove an existing habit to create a new one.',
+        [{ text: 'OK' }]
+      );
+      return;
+    }
     router.push('/habit-chat');
   };
 
@@ -102,7 +110,7 @@ export default function HomeScreen() {
           <Text style={styles.greeting}>{getGreeting()}, {user?.name?.split(' ')[0] || 'there'}</Text>
           <Text style={styles.subGreeting}>Small steps, big changes</Text>
         </View>
-        <TouchableOpacity 
+        <TouchableOpacity
           style={styles.notificationButton}
           onPress={() => router.push('/notification-settings')}
         >
@@ -127,7 +135,7 @@ export default function HomeScreen() {
           renderEmptyState()
         ) : (
           <View style={styles.habitsContainer}>
-            <Text style={styles.sectionTitle}>Your Habits</Text>
+            <Text style={styles.sectionTitle}>Resolution Roadmap</Text>
             {habitInstances.map((habit) => (
               <HabitCard
                 key={habit.id}

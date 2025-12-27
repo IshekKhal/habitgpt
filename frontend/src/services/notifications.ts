@@ -157,7 +157,7 @@ async function scheduleDailyNotification(
 
   try {
     // Cancel existing notification with same identifier
-    await Notifications.cancelScheduledNotificationAsync(identifier).catch(() => {});
+    await Notifications.cancelScheduledNotificationAsync(identifier).catch(() => { });
 
     const trigger: Notifications.NotificationTriggerInput = {
       type: Notifications.SchedulableTriggerInputTypes.DAILY,
@@ -182,7 +182,52 @@ async function scheduleDailyNotification(
   }
 }
 
-// Schedule all three daily reminders with coach-style messages
+// Generate personalized notification content
+async function generateNotificationContent(
+  userId: string,
+  timeOfDay: 'morning' | 'afternoon' | 'evening',
+  coachStyle: string
+): Promise<string> {
+  try {
+    // We need user name and habit info.
+    // For MVP, we'll fetch user details here or assume passed.
+    // Actually, getting user details from storage/store is cleaner but we are in a service file.
+    // Let's rely on what we have. We can pass data to this function.
+    // But scheduleAllDailyReminders only has prefs.
+
+    // Quick fetch of user name from storage for now
+    const userJson = await AsyncStorage.getItem('habitgpt-storage');
+    let userName = 'Friend';
+    let habitName = 'your habit';
+    let tasksRemaining = 3; // Default assumption if check fails
+
+    if (userJson) {
+      const data = JSON.parse(userJson);
+      if (data.state?.user?.name) userName = data.state.user.name.split(' ')[0];
+      // Get first active habit persistence
+      if (data.state?.habitInstances && data.state.habitInstances.length > 0) {
+        habitName = data.state.habitInstances[0].habit_name;
+        // Calculate remaining tasks for today? Complex to parse full roadmap from storage string.
+        // We will assume 'some' tasks remaining for the morning schedule.
+      }
+    }
+
+    const response = await axios.post(`${API_URL}/api/notifications/generate`, {
+      user_name: userName,
+      habit_name: habitName,
+      time_of_day: timeOfDay,
+      coach_style: coachStyle,
+      tasks_remaining: tasksRemaining
+    });
+    return response.data.content;
+  } catch (error) {
+    console.log('AI Notification fetch failed, using fallback');
+    const messages = getCoachMessages(coachStyle);
+    return messages[timeOfDay];
+  }
+}
+
+// Schedule all three daily reminders with AI-generated messages
 export async function scheduleAllDailyReminders(prefs?: NotificationPreferences): Promise<void> {
   if (!isNative) {
     console.log('Skipping notification scheduling on web');
@@ -199,14 +244,19 @@ export async function scheduleAllDailyReminders(prefs?: NotificationPreferences)
   const morningTime = parseTime(preferences.morningTime);
   const afternoonTime = parseTime(preferences.afternoonTime);
   const eveningTime = parseTime(preferences.eveningTime);
-  
-  const messages = getCoachMessages(preferences.coachStyle);
+
+  // Fetch AI content (parallel for speed)
+  const [morningMsg, afternoonMsg, eveningMsg] = await Promise.all([
+    generateNotificationContent('user', 'morning', preferences.coachStyle),
+    generateNotificationContent('user', 'afternoon', preferences.coachStyle),
+    generateNotificationContent('user', 'evening', preferences.coachStyle)
+  ]);
 
   // Morning reminder
   await scheduleDailyNotification(
     'morning-reminder',
     'HabitGPT',
-    messages.morning,
+    morningMsg,
     morningTime
   );
 
@@ -214,25 +264,36 @@ export async function scheduleAllDailyReminders(prefs?: NotificationPreferences)
   await scheduleDailyNotification(
     'afternoon-reminder',
     'HabitGPT',
-    messages.afternoon,
+    afternoonMsg,
     afternoonTime
   );
 
-  // Evening reminder
+  // Evening reminder (FOMO/Urgent by default)
   await scheduleDailyNotification(
     'evening-reminder',
     'HabitGPT',
-    messages.evening,
+    eveningMsg,
     eveningTime
   );
 
-  console.log('All daily reminders scheduled with', preferences.coachStyle, 'style');
+  console.log('All AI daily reminders scheduled');
+}
+
+// Cancel a specific daily notification (e.g. if done for the day)
+export async function cancelDailyNotification(identifier: string): Promise<void> {
+  if (!isNative) return;
+  try {
+    await Notifications.cancelScheduledNotificationAsync(identifier);
+    console.log(`Cancelled notification: ${identifier}`);
+  } catch (e) {
+    console.log(`Error cancelling ${identifier}:`, e);
+  }
 }
 
 // Cancel all scheduled notifications
 export async function cancelAllNotifications(): Promise<void> {
   if (!isNative) return;
-  
+
   try {
     await Notifications.cancelAllScheduledNotificationsAsync();
     console.log('All notifications cancelled');
@@ -265,7 +326,7 @@ export async function sendImmediateNotification(title: string, body: string): Pr
 // Get all scheduled notifications (for debugging)
 export async function getScheduledNotifications(): Promise<Notifications.NotificationRequest[]> {
   if (!isNative) return [];
-  
+
   try {
     return await Notifications.getAllScheduledNotificationsAsync();
   } catch (error) {
@@ -300,7 +361,7 @@ export async function initializeNotifications(userId: string, coachStyle?: strin
   try {
     // Request permissions and get token
     const token = await registerForPushNotificationsAsync();
-    
+
     if (token) {
       // Save token to backend
       await savePushToken(userId, token);
@@ -353,5 +414,13 @@ export async function sendHabitCompleteNotification(habitName: string): Promise<
   await sendImmediateNotification(
     '29 Days Complete! 🎉',
     `You did it! "${habitName}" is now part of who you are.`
+  );
+}
+
+// Send daily completion notification
+export async function sendDailyCompletionNotification(habitName: string): Promise<void> {
+  await sendImmediateNotification(
+    'Day Complete! 🎉',
+    `Great job on "${habitName}" today! You're making progress.`
   );
 }

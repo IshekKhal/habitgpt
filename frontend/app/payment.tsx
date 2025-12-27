@@ -103,7 +103,7 @@ export default function PaymentScreen() {
         {/* Pricing Info */}
         <View style={styles.pricingCard}>
           <View style={styles.pricingHeader}>
-            <Text style={styles.pricingTitle}>29-Day Free Trial</Text>
+            <Text style={styles.pricingTitle}>7-Day Free Trial</Text>
             <View style={styles.priceBadge}>
               <Text style={styles.priceBadgeText}>FIRST HABIT FREE</Text>
             </View>
@@ -112,7 +112,7 @@ export default function PaymentScreen() {
             After your trial, continue growing habits for
           </Text>
           <View style={styles.priceRow}>
-            <Text style={styles.priceAmount}>$19.99</Text>
+            <Text style={styles.priceAmount}>$5.99</Text>
             <Text style={styles.pricePeriod}>/month</Text>
           </View>
           <Text style={styles.pricingNote}>
@@ -131,7 +131,7 @@ export default function PaymentScreen() {
         </TouchableOpacity>
 
         <Text style={styles.disclaimer}>
-          Payment is securely stored via RevenueCat. You won't be charged until your 29-day trial ends.
+          Payment is securely stored via RevenueCat. You won't be charged until your 7-day trial ends.
         </Text>
       </ScrollView>
 

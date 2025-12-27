@@ -15,8 +15,8 @@ const REVENUECAT_API_KEY_ANDROID = process.env.EXPO_PUBLIC_REVENUECAT_ANDROID_KE
 
 // Product Identifiers - Updated for HabitGPT
 export const PRODUCT_IDS = {
-  MONTHLY: 'habitgpt_monthly_1999',
-  YEARLY: 'habitgpt_yearly_15999',
+  MONTHLY: 'habitgpt_monthly_599',
+  YEARLY: 'habitgpt_yearly_5999',
 };
 
 // Entitlement Identifier
@@ -35,7 +35,7 @@ export interface SubscriptionStatus {
 export async function initializeRevenueCat(userId?: string): Promise<void> {
   try {
     const apiKey = Platform.OS === 'ios' ? REVENUECAT_API_KEY_IOS : REVENUECAT_API_KEY_ANDROID;
-    
+
     if (__DEV__) {
       Purchases.setLogLevel(LOG_LEVEL.DEBUG);
     }
@@ -75,13 +75,13 @@ export async function logoutFromRevenueCat(): Promise<void> {
 export async function getOfferings(): Promise<PurchasesOffering | null> {
   try {
     const offerings = await Purchases.getOfferings();
-    
+
     if (offerings.current !== null) {
       return offerings.current;
     }
-    
+
     return null;
-  } catch (error) {
+  } catch (error: any) {
     console.error('Failed to get offerings:', error);
     return null;
   }
@@ -94,7 +94,7 @@ export async function getPackages(): Promise<{
 }> {
   try {
     const offering = await getOfferings();
-    
+
     if (!offering) {
       return { monthly: null, yearly: null };
     }
@@ -102,13 +102,13 @@ export async function getPackages(): Promise<{
     const monthly = offering.monthly || offering.availablePackages.find(
       (pkg) => pkg.product.identifier.includes('monthly')
     ) || null;
-    
+
     const yearly = offering.annual || offering.availablePackages.find(
       (pkg) => pkg.product.identifier.includes('yearly') || pkg.product.identifier.includes('annual')
     ) || null;
 
     return { monthly, yearly };
-  } catch (error) {
+  } catch (error: any) {
     console.error('Failed to get packages:', error);
     return { monthly: null, yearly: null };
   }
@@ -122,10 +122,10 @@ export async function purchasePackage(pkg: PurchasesPackage): Promise<{
 }> {
   try {
     const { customerInfo } = await Purchases.purchasePackage(pkg);
-    
+
     // Check if the user now has the premium entitlement
     const isPremium = customerInfo.entitlements.active[ENTITLEMENT_ID] !== undefined;
-    
+
     return {
       success: isPremium,
       customerInfo,
@@ -135,7 +135,7 @@ export async function purchasePackage(pkg: PurchasesPackage): Promise<{
     if (error.userCancelled) {
       return { success: false, error: 'Purchase cancelled' };
     }
-    
+
     console.error('Purchase failed:', error);
     return { success: false, error: error.message || 'Purchase failed' };
   }
@@ -145,9 +145,9 @@ export async function purchasePackage(pkg: PurchasesPackage): Promise<{
 export async function getSubscriptionStatus(): Promise<SubscriptionStatus> {
   try {
     const customerInfo = await Purchases.getCustomerInfo();
-    
+
     const entitlement = customerInfo.entitlements.active[ENTITLEMENT_ID];
-    
+
     if (!entitlement) {
       return {
         isSubscribed: false,
@@ -157,8 +157,8 @@ export async function getSubscriptionStatus(): Promise<SubscriptionStatus> {
     }
 
     const isTrialActive = entitlement.periodType === 'TRIAL';
-    const expirationDate = entitlement.expirationDate 
-      ? new Date(entitlement.expirationDate) 
+    const expirationDate = entitlement.expirationDate
+      ? new Date(entitlement.expirationDate)
       : undefined;
 
     return {
@@ -169,7 +169,7 @@ export async function getSubscriptionStatus(): Promise<SubscriptionStatus> {
       productId: entitlement.productIdentifier,
       willRenew: entitlement.willRenew,
     };
-  } catch (error) {
+  } catch (error: any) {
     console.error('Failed to get subscription status:', error);
     return {
       isSubscribed: false,
@@ -184,7 +184,7 @@ export async function hasActiveSubscription(): Promise<boolean> {
   try {
     const customerInfo = await Purchases.getCustomerInfo();
     return customerInfo.entitlements.active[ENTITLEMENT_ID] !== undefined;
-  } catch (error) {
+  } catch (error: any) {
     console.error('Failed to check subscription:', error);
     return false;
   }
@@ -199,7 +199,7 @@ export async function restorePurchases(): Promise<{
   try {
     const customerInfo = await Purchases.restorePurchases();
     const isSubscribed = customerInfo.entitlements.active[ENTITLEMENT_ID] !== undefined;
-    
+
     return { success: true, isSubscribed };
   } catch (error: any) {
     console.error('Failed to restore purchases:', error);
@@ -211,7 +211,7 @@ export async function restorePurchases(): Promise<{
 export async function syncSubscriptionWithBackend(userId: string): Promise<void> {
   try {
     const status = await getSubscriptionStatus();
-    
+
     await axios.put(`${API_URL}/api/users/${userId}/subscription`, {
       is_subscribed: status.isSubscribed,
       is_trial_active: status.isTrialActive,
@@ -229,8 +229,8 @@ export async function syncSubscriptionWithBackend(userId: string): Promise<void>
 export function addCustomerInfoUpdateListener(
   callback: (customerInfo: CustomerInfo) => void
 ): () => void {
-  const listener = Purchases.addCustomerInfoUpdateListener(callback);
-  return () => listener.remove();
+  Purchases.addCustomerInfoUpdateListener(callback);
+  return () => Purchases.removeCustomerInfoUpdateListener(callback);
 }
 
 // Format price for display

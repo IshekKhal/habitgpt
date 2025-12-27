@@ -9,49 +9,49 @@ export const COLORS = {
   primary: '#1A1A1A',
   primaryLight: '#333333',
   primaryDark: '#000000',
-  
+
   // Secondary - Muted Green (growth, stability)
   secondary: '#6B9080',
   secondaryLight: '#8FB3A5',
   secondaryDark: '#4A7261',
-  
+
   // Accent - Muted Blue (trust, calm)
   accent: '#7A8B99',
   accentLight: '#9AABB9',
   accentDark: '#5A6B79',
-  
+
   // Warm accent - Soft Amber (routine, warmth)
   warm: '#C9A76C',
   warmLight: '#DCC192',
   warmDark: '#A68B4A',
-  
+
   // Background colors - Warm neutrals (off-white, warm gray)
   background: '#FAFAF8',
   backgroundLight: '#FFFFFF',
   backgroundCard: '#F5F4F2',
   backgroundDark: '#EFEEE9',
-  
+
   // Text colors - High contrast for readability
   textPrimary: '#1A1A1A',
   textSecondary: '#5C5C5C',
   textMuted: '#8A8A8A',
   textLight: '#FFFFFF',
-  
+
   // Status colors - Never use black for failure
   success: '#6B9080',  // Muted green
   warning: '#C9A76C',  // Soft amber
   error: '#C4847A',    // Muted coral (supportive, not harsh)
   info: '#7A8B99',     // Muted blue
-  
+
   // Border colors
   border: '#E5E3DF',
   borderLight: '#EFEEE9',
   borderDark: '#D4D1CB',
-  
+
   // Streak colors (celebratory but not overwhelming)
   streak: '#6B9080',
   streakGlow: '#8FB3A510',
-  
+
   // Dark mode colors (optional, not default)
   darkBackground: '#1A1A1A',
   darkBackgroundLight: '#252525',
@@ -179,10 +179,10 @@ export const COACH_STYLES = {
 export const MICROCOPY = {
   emptyHabits: {
     title: "Your journey starts here",
-    subtitle: "What habit would you like to grow?",
+    subtitle: "Add your first goal for 2026",
   },
   firstHabit: {
-    title: "First 29 days on us",
+    title: "First 7 days on us",
     subtitle: "Build one habit. See the difference.",
   },
   streak: {

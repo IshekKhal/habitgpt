@@ -55,7 +55,7 @@ function NotificationHandler() {
       responseListener.current = Notifications.addNotificationResponseReceivedListener((response) => {
         console.log('Notification tapped:', response);
         const data = response.notification.request.content.data;
-        
+
         // Navigate based on notification type
         if (data?.type === 'daily_reminder') {
           router.push('/(tabs)/home');
@@ -78,11 +78,14 @@ function NotificationHandler() {
   return null;
 }
 
+import DevModeToggle from '../src/components/DevModeToggle'; // <ANTIGRAVITY_DEV_ONLY>
+
 export default function RootLayout() {
   return (
     <QueryClientProvider client={queryClient}>
       <SafeAreaProvider>
         <StatusBar style="dark" />
+        <DevModeToggle />
         <NotificationHandler />
         <Stack
           screenOptions={{
@@ -92,7 +95,13 @@ export default function RootLayout() {
           }}
         >
           <Stack.Screen name="index" />
-          <Stack.Screen name="onboarding/[step]" />
+          <Stack.Screen
+            name="onboarding/[step]"
+            options={({ route }: { route: any }) => ({
+              animation: route.params?.step === '1' ? 'slide_from_right' : 'none',
+              gestureEnabled: false // Prevent swiping back to enforce flow
+            })}
+          />
           <Stack.Screen name="auth" />
           <Stack.Screen name="(tabs)" />
           <Stack.Screen name="habit-chat" options={{ presentation: 'modal' }} />

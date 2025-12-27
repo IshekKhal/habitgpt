@@ -18,6 +18,7 @@ import { getHabitInstance, completeTask, checkSubscriptionStatus, updateHabitSta
 import { TaskItem } from '../../src/components/TaskItem';
 import { PaywallOverlay } from '../../src/components/PaywallOverlay';
 import { hasActiveSubscription, syncSubscriptionWithBackend } from '../../src/services/revenuecat';
+import { cancelDailyNotification, sendDailyCompletionNotification } from '../../src/services/notifications';
 import { COLORS, SPACING, FONTS, BORDER_RADIUS, MICROCOPY } from '../../src/constants/theme';
 import { differenceInDays, format, addDays } from 'date-fns';
 
@@ -29,7 +30,37 @@ export default function HabitRoadmapScreen() {
   const [habit, setHabit] = useState<HabitInstance | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [selectedDay, setSelectedDay] = useState<number>(1);
-  const [activeTab, setActiveTab] = useState<'tasks' | 'resources' | 'milestones'>('tasks');
+  const [activeTab, setActiveTab] = useState<'tasks' | 'analytics' | 'resources' | 'milestones'>('tasks');
+
+  // ... (existing code)
+
+  // Update tabs render
+  <View style={styles.tabs}>
+    <TouchableOpacity
+      style={[styles.tab, activeTab === 'tasks' && styles.tabActive]}
+      onPress={() => setActiveTab('tasks')}
+    >
+      <Text style={[styles.tabText, activeTab === 'tasks' && styles.tabTextActive]}>Tasks</Text>
+    </TouchableOpacity>
+    <TouchableOpacity
+      style={[styles.tab, activeTab === 'analytics' && styles.tabActive]}
+      onPress={() => setActiveTab('analytics')}
+    >
+      <Text style={[styles.tabText, activeTab === 'analytics' && styles.tabTextActive]}>Analytics</Text>
+    </TouchableOpacity>
+    <TouchableOpacity
+      style={[styles.tab, activeTab === 'resources' && styles.tabActive]}
+      onPress={() => setActiveTab('resources')}
+    >
+      <Text style={[styles.tabText, activeTab === 'resources' && styles.tabTextActive]}>Resources</Text>
+    </TouchableOpacity>
+    <TouchableOpacity
+      style={[styles.tab, activeTab === 'milestones' && styles.tabActive]}
+      onPress={() => setActiveTab('milestones')}
+    >
+      <Text style={[styles.tabText, activeTab === 'milestones' && styles.tabTextActive]}>Milestones</Text>
+    </TouchableOpacity>
+  </View>
 
   // Paywall states
   const [showPaywall, setShowPaywall] = useState(false);
@@ -48,34 +79,43 @@ export default function HabitRoadmapScreen() {
   }, [id, isNew]);
 
   const checkAndShowPaywall = async () => {
-    // If this is a newly created habit (coming from payment flow), show paywall
-    if (isNew === 'true') {
-      setShowPaywall(true);
-      setContentBlurred(true);
-      return;
-    }
-
-    // Check subscription status
     try {
-      const hasSubscription = await hasActiveSubscription();
+      // 1. Check RevenueCat status (most reliable source of truth)
+      const hasRCEntitlement = await hasActiveSubscription();
 
-      if (!hasSubscription) {
-        // Check backend subscription status as backup
-        if (user?.id) {
-          const backendStatus = await checkSubscriptionStatus(user.id);
-          if (!backendStatus.is_subscribed) {
-            setShowPaywall(true);
-            setContentBlurred(true);
-          }
-        } else {
-          setShowPaywall(true);
-          setContentBlurred(true);
+      // 2. Check Backend Status (backup)
+      let backendSaysActive = false;
+      if (!hasRCEntitlement && user?.id) {
+        const backendStatus = await checkSubscriptionStatus(user.id);
+        if (backendStatus.is_subscribed || backendStatus.is_trial_active) {
+          backendSaysActive = true;
         }
       }
+
+      // 3. Check Local Store Status
+      const localSaysActive = subscriptionStatus.isSubscribed || subscriptionStatus.isTrialActive;
+
+      // Combine checks - valid if ANY source confirms active subscription/trial
+      const isSubscribedOrTrialing = hasRCEntitlement || backendSaysActive || localSaysActive;
+
+      if (isSubscribedOrTrialing) {
+        // User has access. Do NOT show paywall.
+        setShowPaywall(false);
+        setContentBlurred(false);
+        return;
+      }
+
+      // If NOT subscribed, show paywall (especially if isNew means they just tried to create one)
+      setShowPaywall(true);
+      setContentBlurred(true);
+
     } catch (error) {
       console.error('Error checking subscription:', error);
-      // On error, check if user has trial
-      if (!user?.trial_started && !subscriptionStatus.isSubscribed) {
+      // Fallback: If error, force paywall unless local store explicitly says active
+      if (subscriptionStatus.isSubscribed || subscriptionStatus.isTrialActive) {
+        setShowPaywall(false);
+        setContentBlurred(false);
+      } else {
         setShowPaywall(true);
         setContentBlurred(true);
       }
@@ -197,6 +237,26 @@ export default function HabitRoadmapScreen() {
           completion_percentage: result.completion_percentage,
           current_streak: result.current_streak,
         });
+
+        // Cancel evening notification if today's tasks are done
+        const today = new Date();
+        const start = new Date(habit.start_date);
+        const currentActualDay = Math.max(1, differenceInDays(today, start) + 1);
+
+        if (selectedDay === currentActualDay) {
+          const dayPlan = updatedDayPlans.find(dp => dp.day_number === selectedDay);
+          if (dayPlan && dayPlan.completion_percentage >= 100) {
+            // Import this dynamically or ensure it is imported at top
+            // We will add the import at the top in a separate change if needed, 
+            // but for now calling the function assuming it is available or adding import via separate instruction? 
+            // Better to add import at top first? 
+            // Actually, let's assume I'll add the import line in the next step or same step if possible.
+            // I cannot change two places (import and usage) with one replace_file_content safely if far apart.
+            // I will do usage here and import in next step.
+            cancelDailyNotification('evening-reminder');
+            sendDailyCompletionNotification(habit.habit_name);
+          }
+        }
       }
     } catch (error) {
       console.error('Failed to toggle task:', error);
@@ -334,6 +394,12 @@ export default function HabitRoadmapScreen() {
               <Text style={[styles.tabText, activeTab === 'tasks' && styles.tabTextActive]}>Tasks</Text>
             </TouchableOpacity>
             <TouchableOpacity
+              style={[styles.tab, activeTab === 'analytics' && styles.tabActive]}
+              onPress={() => setActiveTab('analytics')}
+            >
+              <Text style={[styles.tabText, activeTab === 'analytics' && styles.tabTextActive]}>Analytics</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
               style={[styles.tab, activeTab === 'resources' && styles.tabActive]}
               onPress={() => setActiveTab('resources')}
             >
@@ -365,6 +431,77 @@ export default function HabitRoadmapScreen() {
                     <Text style={styles.emptyText}>No tasks for this day</Text>
                   </View>
                 )}
+              </View>
+            )}
+
+            {activeTab === 'analytics' && (
+              <View>
+                <View style={styles.statsRow}>
+                  <View style={styles.statCard}>
+                    <Text style={styles.statValue}>{Math.round(habit.completion_percentage)}%</Text>
+                    <Text style={styles.statLabel}>Completion</Text>
+                  </View>
+                  <View style={styles.statCard}>
+                    <Text style={styles.statValue}>{habit.current_streak}</Text>
+                    <Text style={styles.statLabel}>Current Streak</Text>
+                  </View>
+                  <View style={styles.statCard}>
+                    <Text style={styles.statValue}>{habit.longest_streak}</Text>
+                    <Text style={styles.statLabel}>Best Streak</Text>
+                  </View>
+                </View>
+
+                <View style={[styles.chartContainer, { marginTop: 0, marginBottom: SPACING.lg }]}>
+                  <Text style={[styles.sectionTitle, { marginBottom: SPACING.md }]}>29-Day Overview</Text>
+                  <View style={styles.gridContainer}>
+                    {habit.roadmap?.day_plans.map((dp) => {
+                      const isPast = dp.day_number < currentDay;
+                      const isCurrent = dp.day_number === currentDay;
+                      const isCompleted = dp.completion_percentage >= 100;
+
+                      let backgroundColor = COLORS.backgroundLight;
+                      if (isCompleted) backgroundColor = COLORS.primary;
+                      else if (isPast && !isCompleted) backgroundColor = COLORS.error + '40'; // Faint red for missed
+                      else if (isCurrent) backgroundColor = COLORS.secondary;
+
+                      return (
+                        <TouchableOpacity
+                          key={dp.day_number}
+                          style={[styles.gridItem, { backgroundColor }]}
+                          onPress={() => !contentBlurred && setSelectedDay(dp.day_number)}
+                          disabled={contentBlurred}
+                        >
+                          <Text style={[
+                            styles.gridText,
+                            (isCompleted || isCurrent) && { color: COLORS.textLight }
+                          ]}>
+                            {dp.day_number}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                </View>
+
+                <View style={styles.chartContainer}>
+                  <Text style={[styles.sectionTitle, { marginBottom: SPACING.md }]}>Weekly Progress</Text>
+                  <BarChart
+                    data={getChartData()}
+                    width={width - 80}
+                    height={120}
+                    barWidth={18}
+                    barBorderRadius={4}
+                    frontColor={COLORS.primary}
+                    backgroundColor={COLORS.backgroundCard}
+                    yAxisThickness={0}
+                    xAxisThickness={0}
+                    xAxisLabelTextStyle={{ color: COLORS.textMuted, fontSize: 10 }}
+                    noOfSections={4}
+                    maxValue={100}
+                    hideYAxisText
+                    hideRules
+                  />
+                </View>
               </View>
             )}
 
@@ -710,5 +847,49 @@ const styles = StyleSheet.create({
     fontSize: FONTS.size.sm,
     color: COLORS.textSecondary,
     lineHeight: 22,
+  },
+
+  // Analytics Styles
+  statsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: SPACING.lg,
+    gap: SPACING.sm,
+  },
+  statCard: {
+    flex: 1,
+    backgroundColor: COLORS.backgroundCard,
+    borderRadius: BORDER_RADIUS.lg,
+    padding: SPACING.md,
+    alignItems: 'center',
+  },
+  statValue: {
+    fontSize: FONTS.size.xl,
+    fontWeight: '700',
+    color: COLORS.primary,
+    marginBottom: 4,
+  },
+  statLabel: {
+    fontSize: FONTS.size.xs,
+    color: COLORS.textSecondary,
+    fontWeight: '500',
+  },
+  gridContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    justifyContent: 'center',
+  },
+  gridItem: {
+    width: (width - 80 - 48) / 7, // (width - padding - gaps) / 7 columns
+    aspectRatio: 1,
+    borderRadius: BORDER_RADIUS.sm,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  gridText: {
+    fontSize: FONTS.size.xs,
+    fontWeight: '600',
+    color: COLORS.textSecondary,
   },
 });

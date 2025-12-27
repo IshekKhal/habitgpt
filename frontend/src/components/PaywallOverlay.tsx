@@ -20,6 +20,7 @@ import {
   PRODUCT_IDS,
 } from '../services/revenuecat';
 import { PurchasesPackage } from 'react-native-purchases';
+import { useStore } from '../store/useStore'; // <ANTIGRAVITY_DEV_ONLY>
 
 interface PaywallOverlayProps {
   visible: boolean;
@@ -34,6 +35,7 @@ export const PaywallOverlay: React.FC<PaywallOverlayProps> = ({
   onClose,
   isFirstHabit = true,
 }) => {
+  const { isDevMode } = useStore(); // <ANTIGRAVITY_DEV_ONLY>
   const [loading, setLoading] = useState(true);
   const [purchasing, setPurchasing] = useState(false);
   const [selectedPlan, setSelectedPlan] = useState<'monthly' | 'yearly'>('monthly');
@@ -43,10 +45,10 @@ export const PaywallOverlay: React.FC<PaywallOverlayProps> = ({
   }>({ monthly: null, yearly: null });
 
   useEffect(() => {
-    if (visible) {
+    if (visible && !isDevMode) { // <ANTIGRAVITY_DEV_ONLY> check added
       loadPackages();
     }
-  }, [visible]);
+  }, [visible, isDevMode]); // <ANTIGRAVITY_DEV_ONLY> dep added
 
   const loadPackages = async () => {
     setLoading(true);
@@ -64,17 +66,7 @@ export const PaywallOverlay: React.FC<PaywallOverlayProps> = ({
     const pkg = selectedPlan === 'monthly' ? packages.monthly : packages.yearly;
 
     if (!pkg) {
-      // For development/demo, simulate success
-      Alert.alert(
-        'Demo Mode',
-        'RevenueCat is not configured. In production, this would process the payment. Starting your free trial.',
-        [
-          {
-            text: 'Start Trial',
-            onPress: () => onSuccess(),
-          },
-        ]
-      );
+      Alert.alert('Configuration Error', 'No packages available. Please contact support.');
       return;
     }
 
@@ -120,10 +112,14 @@ export const PaywallOverlay: React.FC<PaywallOverlayProps> = ({
     }
   };
 
-  const monthlyPrice = packages.monthly?.product.priceString || '$19.99';
-  const yearlyPrice = packages.yearly?.product.priceString || '$159.99';
-  const yearlyMonthly = '$13.33';
-  const savingsPercent = 33;
+  const monthlyPrice = packages.monthly?.product.priceString || '$5.99';
+  const yearlyPrice = packages.yearly?.product.priceString || '$59.99';
+  const yearlyMonthly = '$5.00'; // 59.99 / 12 ~ 4.999
+  const savingsPercent = 17; // (4.99*12 = 59.88. 59.88-49.99 = 9.89. 9.89/59.88 = 16.5%)
+
+  // <ANTIGRAVITY_DEV_ONLY>
+  if (isDevMode) return null;
+  // </ANTIGRAVITY_DEV_ONLY>
 
   if (!visible) return null;
 
@@ -159,7 +155,7 @@ export const PaywallOverlay: React.FC<PaywallOverlayProps> = ({
                 <>
                   <Text style={styles.title}>Unlock Your Journey</Text>
                   <View style={styles.freeTrialBadge}>
-                    <Text style={styles.freeTrialText}>FIRST 29 DAYS FREE</Text>
+                    <Text style={styles.freeTrialText}>FIRST 7 DAYS FREE</Text>
                   </View>
                   <Text style={styles.subtitle}>
                     Your personalized habit roadmap is ready. Start your free trial to unlock it.
@@ -211,7 +207,7 @@ export const PaywallOverlay: React.FC<PaywallOverlayProps> = ({
                 </View>
 
                 <Text style={styles.planDescription}>
-                  Cancel anytime. Auto-renews monthly.
+                  Flexible billing. Perfect for getting started.
                 </Text>
               </TouchableOpacity>
 
@@ -264,7 +260,7 @@ export const PaywallOverlay: React.FC<PaywallOverlayProps> = ({
             <View style={styles.featuresContainer}>
               <View style={styles.featureItem}>
                 <Ionicons name="checkmark" size={18} color={COLORS.secondary} />
-                <Text style={styles.featureText}>Personalized 29-day roadmaps</Text>
+                <Text style={styles.featureText}>Personalized habit roadmaps</Text>
               </View>
               <View style={styles.featureItem}>
                 <Ionicons name="checkmark" size={18} color={COLORS.secondary} />

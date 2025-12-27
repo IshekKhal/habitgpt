@@ -12,10 +12,10 @@ try:
 except Exception as e:
     print(f"List models failed: {e}")
 
-print("\nTesting gemini-flash-latest...")
+print("\nTesting gemini-2.5-flash...")
 try:
-    model = genai.GenerativeModel('gemini-flash-latest')
-    response = model.generate_content("Hello")
-    print(f"Success gemini-flash-latest! Response: {response.text}")
+    model = genai.GenerativeModel('gemini-2.5-flash')
+    response = model.generate_content("Say 'Hello' if you are working.")
+    print(f"Success gemini-2.5-flash! Response: {response.text}")
 except Exception as e:
-    print(f"Error gemini-flash-latest: {e}")
+    print(f"Error gemini-2.5-flash: {e}")

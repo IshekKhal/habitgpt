@@ -34,6 +34,16 @@ export default function WelcomeScreen() {
   }, [user]);
 
   const handleGetStarted = () => {
+    // Reset any previous progress to ensure clean state
+    useStore.getState().resetOnboarding();
+
+    // <ANTIGRAVITY_DEV_ONLY>
+    if (useStore.getState().isDevMode) {
+      router.push('/auth');
+      return;
+    }
+    // </ANTIGRAVITY_DEV_ONLY>
+
     router.push('/onboarding/1');
   };
 
@@ -47,7 +57,7 @@ export default function WelcomeScreen() {
             <Ionicons name="leaf" size={56} color={COLORS.primary} />
           </View>
           <Text style={styles.appName}>HabitGPT</Text>
-          <Text style={styles.tagline}>Grow any habit in 29 days</Text>
+          <Text style={styles.tagline}>New Year    New Habits</Text>
         </View>
 
         {/* Features Section */}

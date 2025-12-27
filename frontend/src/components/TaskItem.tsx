@@ -10,8 +10,15 @@ interface TaskItemProps {
 }
 
 export const TaskItem: React.FC<TaskItemProps> = ({ task, onToggle }) => {
+  const [expanded, setExpanded] = React.useState(false);
+
   const openResource = (url: string) => {
-    Linking.openURL(url).catch((err) => console.error('Failed to open URL:', err));
+    console.log('Attempting to open resource:', url);
+    if (url.startsWith('http')) {
+      Linking.openURL(url).catch((err) => console.error('Failed to open URL:', err));
+    } else {
+      console.warn('Invalid URL format:', url);
+    }
   };
 
   return (
@@ -29,18 +36,35 @@ export const TaskItem: React.FC<TaskItemProps> = ({ task, onToggle }) => {
       </TouchableOpacity>
 
       <View style={styles.content}>
-        <Text style={[styles.title, task.completed && styles.titleCompleted]}>
-          {task.title}
-        </Text>
-        <Text style={styles.description} numberOfLines={2}>
-          {task.description}
-        </Text>
+        <TouchableOpacity
+          activeOpacity={0.7}
+          onPress={() => setExpanded(!expanded)}
+        >
+          <Text style={[styles.title, task.completed && styles.titleCompleted]}>
+            {task.title}
+          </Text>
+          <Text
+            style={styles.description}
+            numberOfLines={expanded ? undefined : 2}
+          >
+            {task.description}
+          </Text>
+        </TouchableOpacity>
 
         <View style={styles.meta}>
-          <View style={styles.timeContainer}>
+          <TouchableOpacity
+            style={styles.timeContainer}
+            onPress={() => setExpanded(!expanded)}
+          >
             <Ionicons name="time-outline" size={14} color={COLORS.textMuted} />
             <Text style={styles.timeText}>{task.estimated_minutes} min</Text>
-          </View>
+            <Ionicons
+              name={expanded ? "chevron-up" : "chevron-down"}
+              size={14}
+              color={COLORS.textMuted}
+              style={{ marginLeft: 4 }}
+            />
+          </TouchableOpacity>
 
           {task.resource_links && task.resource_links.length > 0 && (
             <View style={styles.resourcesContainer}>
@@ -117,6 +141,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    paddingTop: SPACING.xs,
   },
   timeContainer: {
     flexDirection: 'row',

@@ -1,0 +1,19 @@
+# Core FastAPI
+fastapi==0.110.1
+uvicorn==0.25.0
+python-dotenv==1.2.1
+python-multipart==0.0.20
+
+# Supabase
+supabase==2.25.1
+
+# Google Gemini AI
+google-generativeai==0.8.5
+
+# Pydantic validation
+pydantic==2.12.5
+slowapi==0.1.9
+
+# HTTP client
+httpx==0.28.1
+requests==2.32.5
