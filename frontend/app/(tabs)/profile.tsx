@@ -6,6 +6,8 @@ import {
   ScrollView,
   TouchableOpacity,
   Alert,
+  Linking,
+  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
@@ -94,7 +96,7 @@ export default function ProfileScreen() {
         {onboardingProfile && (
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Your Habit Profile</Text>
-            
+
             <View style={styles.detailRow}>
               <Ionicons name="compass-outline" size={20} color={COLORS.textSecondary} />
               <Text style={styles.detailLabel}>Focus Area</Text>
@@ -124,9 +126,9 @@ export default function ProfileScreen() {
         {/* Settings Section */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Settings</Text>
-          
-          <TouchableOpacity 
-            style={styles.menuItem} 
+
+          <TouchableOpacity
+            style={styles.menuItem}
             activeOpacity={0.7}
             onPress={() => router.push('/notification-settings')}
           >
@@ -135,9 +137,19 @@ export default function ProfileScreen() {
             <Ionicons name="chevron-forward" size={18} color={COLORS.textMuted} />
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.menuItem} activeOpacity={0.7}>
+          <TouchableOpacity
+            style={styles.menuItem}
+            activeOpacity={0.7}
+            onPress={() => {
+              if (Platform.OS === 'ios') {
+                Linking.openURL('https://apps.apple.com/account/subscriptions');
+              } else {
+                Linking.openURL('https://play.google.com/store/account/subscriptions');
+              }
+            }}
+          >
             <Ionicons name="card-outline" size={20} color={COLORS.textPrimary} />
-            <Text style={styles.menuItemText}>Subscription</Text>
+            <Text style={styles.menuItemText}>Manage Subscription</Text>
             <Ionicons name="chevron-forward" size={18} color={COLORS.textMuted} />
           </TouchableOpacity>
 
